@@ -9,7 +9,9 @@
     "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env NODE_ENV=development electron .\"",
     "build": "vite build && electron-builder",
     "build:renderer": "vite build",
-    "start": "electron ."
+    "start": "electron .",
+    "rebuild": "electron-rebuild -f",
+    "postinstall": "electron-rebuild"
   },
   "dependencies": {
     "active-win": "^8.2.1",
@@ -19,6 +21,7 @@
     "vue-chartjs": "^5.3.1"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
     "@vitejs/plugin-vue": "^5.1.4",
     "concurrently": "^9.0.1",
     "cross-env": "^7.0.3",
