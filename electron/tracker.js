@@ -142,7 +142,18 @@ function stopTracker() {
   console.log('屏幕使用时间追踪器已停止')
 }
 
+function getCurrentWindowInfo() {
+  if (currentWindow && currentWindowStart) {
+    return {
+      ...currentWindow,
+      startTime: currentWindowStart
+    }
+  }
+  return currentWindow
+}
+
 module.exports = {
   startTracker,
-  stopTracker
+  stopTracker,
+  getCurrentWindow: getCurrentWindowInfo
 }

@@ -8,6 +8,17 @@ const {
   deleteFocusRule
 } = require('./database')
 
+let miniWindowRef = null
+let mainModule = null
+
+function setMiniWindowRef(win) {
+  miniWindowRef = win
+}
+
+function setMainModule(mod) {
+  mainModule = mod
+}
+
 function registerIpcHandlers() {
   ipcMain.handle('get-today-app-usage', () => {
     return getTodayAppUsage()
@@ -26,11 +37,21 @@ function registerIpcHandlers() {
   })
 
   ipcMain.handle('save-focus-rule', (_event, rule) => {
-    return saveFocusRule(rule)
+    const result = saveFocusRule(rule)
+    if (miniWindowRef && miniWindowRef.webContents) {
+      const mainWindow = mainModule && mainModule.getMainWindow ? mainModule.getMainWindow() : null
+      if (mainModule && typeof mainModule.updateMiniWindowData === 'function') {
+        mainModule.updateMiniWindowData()
+      }
+    }
+    return result
   })
 
   ipcMain.handle('delete-focus-rule', (_event, id) => {
-    return deleteFocusRule(id)
+    deleteFocusRule(id)
+    if (mainModule && typeof mainModule.updateMiniWindowData === 'function') {
+      mainModule.updateMiniWindowData()
+    }
   })
 
   ipcMain.on('window-minimize', () => {
@@ -41,6 +62,39 @@ function registerIpcHandlers() {
   ipcMain.on('window-close', () => {
     const win = BrowserWindow.getFocusedWindow()
     if (win) win.hide()
+  })
+
+  ipcMain.on('mini-window-switch-to-main', () => {
+    if (mainModule && typeof mainModule.switchToMainWindow === 'function') {
+      mainModule.switchToMainWindow()
+    }
+  })
+
+  ipcMain.handle('mini-window-get-initial-data', () => {
+    const totalTime = getTodayTotalTime()
+    const focusRules = getFocusRules()
+    const appUsage = getTodayAppUsage()
+    
+    let currentApp = null
+    if (mainModule && typeof mainModule.getCurrentWindow === 'function') {
+      const currentWindow = mainModule.getCurrentWindow()
+      if (currentWindow) {
+        const app = appUsage.find(a => 
+          a.process_name.toLowerCase() === currentWindow.processName.toLowerCase()
+        )
+        currentApp = {
+          processName: currentWindow.processName,
+          windowTitle: currentWindow.windowTitle,
+          duration: app ? app.total_duration : 0
+        }
+      }
+    }
+
+    return {
+      totalTime,
+      currentApp,
+      focusRules
+    }
   })
 }
 
@@ -62,8 +116,17 @@ function sendFocusAlert(data) {
   })
 }
 
+function sendMiniWindowUpdate(data) {
+  if (miniWindowRef && miniWindowRef.webContents && !miniWindowRef.isDestroyed()) {
+    miniWindowRef.webContents.send('mini-window-update', data)
+  }
+}
+
 module.exports = {
   registerIpcHandlers,
   sendUsageUpdate,
-  sendFocusAlert
+  sendFocusAlert,
+  sendMiniWindowUpdate,
+  setMiniWindowRef,
+  setMainModule
 }

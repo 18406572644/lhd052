@@ -1,13 +1,19 @@
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, screen } = require('electron')
 const path = require('path')
-const { initDatabase } = require('./database')
-const { registerIpcHandlers } = require('./ipc')
-const { startTracker, stopTracker } = require('./tracker')
+const { initDatabase, getTodayTotalTime, getTodayAppUsage, getFocusRules } = require('./database')
+const { registerIpcHandlers, sendMiniWindowUpdate, setMiniWindowRef, setMainModule } = require('./ipc')
+const { startTracker, stopTracker, getCurrentWindow } = require('./tracker')
 
 let mainWindow = null
+let miniWindow = null
 let tray = null
+let isMiniMode = false
+let miniUpdateInterval = null
 
 const isDev = process.env.NODE_ENV === 'development'
+
+const MINI_WINDOW_WIDTH = 160
+const MINI_WINDOW_HEIGHT = 80
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -43,6 +49,132 @@ function createWindow() {
   })
 }
 
+function createMiniWindow() {
+  const primaryDisplay = screen.getPrimaryDisplay()
+  const { workArea } = primaryDisplay
+  const x = workArea.x + workArea.width - MINI_WINDOW_WIDTH - 20
+  const y = workArea.y + workArea.height - MINI_WINDOW_HEIGHT - 20
+
+  miniWindow = new BrowserWindow({
+    width: MINI_WINDOW_WIDTH,
+    height: MINI_WINDOW_HEIGHT,
+    x: x,
+    y: y,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: true,
+    backgroundColor: '#00000000',
+    movable: true,
+    webPreferences: {
+      contextIsolation: false,
+      nodeIntegration: true,
+      sandbox: false
+    }
+  })
+
+  miniWindow.setAlwaysOnTop(true, 'screen-saver')
+  miniWindow.setVisibleOnAllWorkspaces(true)
+
+  miniWindow.loadFile(path.join(__dirname, 'mini-window.html'))
+
+  miniWindow.on('closed', () => {
+    miniWindow = null
+    setMiniWindowRef(null)
+    if (miniUpdateInterval) {
+      clearInterval(miniUpdateInterval)
+      miniUpdateInterval = null
+    }
+  })
+
+  miniWindow.webContents.on('did-finish-load', () => {
+    updateMiniWindowData()
+  })
+
+  setMiniWindowRef(miniWindow)
+
+  if (!miniUpdateInterval) {
+    miniUpdateInterval = setInterval(() => {
+      if (miniWindow && miniWindow.isVisible()) {
+        updateMiniWindowData()
+      }
+    }, 5000)
+  }
+}
+
+function toggleMiniMode() {
+  isMiniMode = !isMiniMode
+
+  if (isMiniMode) {
+    if (!miniWindow) {
+      createMiniWindow()
+    } else {
+      miniWindow.show()
+    }
+    if (mainWindow) {
+      mainWindow.hide()
+    }
+  } else {
+    if (miniWindow) {
+      miniWindow.hide()
+    }
+    if (mainWindow) {
+      mainWindow.show()
+      mainWindow.focus()
+    } else {
+      createWindow()
+    }
+  }
+
+  updateTrayMenu()
+}
+
+function switchToMainWindow() {
+  if (isMiniMode) {
+    toggleMiniMode()
+  } else {
+    if (mainWindow) {
+      mainWindow.show()
+      mainWindow.focus()
+    } else {
+      createWindow()
+    }
+  }
+}
+
+function getCurrentAppDuration(processName) {
+  if (!processName) return 0
+  const appUsage = getTodayAppUsage()
+  const app = appUsage.find(a => a.process_name.toLowerCase() === processName.toLowerCase())
+  return app ? app.total_duration : 0
+}
+
+function updateMiniWindowData() {
+  if (!miniWindow || !miniWindow.webContents) return
+
+  const totalTime = getTodayTotalTime()
+  const currentWindow = getCurrentWindow()
+  const focusRules = getFocusRules()
+
+  let currentApp = null
+  if (currentWindow) {
+    const duration = getCurrentAppDuration(currentWindow.processName)
+    currentApp = {
+      processName: currentWindow.processName,
+      windowTitle: currentWindow.windowTitle,
+      duration: duration
+    }
+  }
+
+  sendMiniWindowUpdate({
+    totalTime,
+    currentApp,
+    focusRules
+  })
+}
+
 function createTray() {
   const icon = nativeImage.createEmpty()
   const size = 16
@@ -68,19 +200,44 @@ function createTray() {
   tray = new Tray(trayIcon)
   tray.setToolTip('屏幕使用时间统计')
 
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: '显示主窗口',
-      click: () => {
-        if (mainWindow) {
+  updateTrayMenu()
+
+  tray.on('click', () => {
+    if (isMiniMode) {
+      toggleMiniMode()
+    } else {
+      if (mainWindow) {
+        if (mainWindow.isVisible()) {
+          mainWindow.hide()
+        } else {
           mainWindow.show()
           mainWindow.focus()
-        } else {
-          createWindow()
         }
+      } else {
+        createWindow()
+      }
+    }
+  })
+}
+
+function updateTrayMenu() {
+  if (!tray) return
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: isMiniMode ? '显示主窗口' : '迷你模式',
+      click: () => {
+        toggleMiniMode()
       }
     },
     { type: 'separator' },
+    {
+      label: '显示主窗口',
+      visible: isMiniMode,
+      click: () => {
+        switchToMainWindow()
+      }
+    },
     {
       label: '开机自启',
       type: 'checkbox',
@@ -103,24 +260,12 @@ function createTray() {
   ])
 
   tray.setContextMenu(contextMenu)
-
-  tray.on('click', () => {
-    if (mainWindow) {
-      if (mainWindow.isVisible()) {
-        mainWindow.hide()
-      } else {
-        mainWindow.show()
-        mainWindow.focus()
-      }
-    } else {
-      createWindow()
-    }
-  })
 }
 
 app.whenReady().then(() => {
   initDatabase()
   registerIpcHandlers()
+  setMainModule(module.exports)
   createWindow()
   createTray()
   startTracker()
@@ -134,6 +279,9 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', (e) => {
   e.preventDefault()
+  if (isMiniMode && miniWindow) {
+    return
+  }
   if (mainWindow) {
     mainWindow.hide()
   }
@@ -141,8 +289,18 @@ app.on('window-all-closed', (e) => {
 
 app.on('before-quit', () => {
   stopTracker()
+  if (miniUpdateInterval) {
+    clearInterval(miniUpdateInterval)
+    miniUpdateInterval = null
+  }
 })
 
 module.exports = {
-  getMainWindow: () => mainWindow
+  getMainWindow: () => mainWindow,
+  getMiniWindow: () => miniWindow,
+  getCurrentWindow,
+  toggleMiniMode,
+  switchToMainWindow,
+  updateMiniWindowData,
+  isMiniMode: () => isMiniMode
 }

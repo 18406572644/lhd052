@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mini Window</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    body {
+      width: 160px;
+      height: 80px;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: transparent;
+      cursor: move;
+      -webkit-app-region: drag;
+    }
+
+    .mini-container {
+      width: 100%;
+      height: 100%;
+      background: rgba(20, 25, 35, 0.85);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+      display: flex;
+      flex-direction: column;
+      padding: 8px 10px;
+      position: relative;
+    }
+
+    .mini-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .total-time {
+      display: flex;
+      align-items: baseline;
+      gap: 1px;
+    }
+
+    .total-time .value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #66fcb8;
+      line-height: 1;
+      letter-spacing: -0.5px;
+    }
+
+    .total-time .unit {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.6);
+      margin-left: 1px;
+      font-weight: 500;
+    }
+
+    .focus-indicator {
+      width: 14px;
+      height: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      opacity: 0.6;
+      cursor: default;
+      -webkit-app-region: no-drag;
+    }
+
+    .focus-indicator.active {
+      opacity: 1;
+    }
+
+    .mini-bottom {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+      min-width: 0;
+    }
+
+    .app-icon {
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .app-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 1px;
+    }
+
+    .app-name {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.9);
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .app-duration {
+      font-size: 9px;
+      color: rgba(255, 255, 255, 0.5);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .switch-btn {
+      position: absolute;
+      bottom: 4px;
+      right: 6px;
+      width: 16px;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      opacity: 0.4;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: opacity 0.15s ease;
+      -webkit-app-region: no-drag;
+    }
+
+    .switch-btn:hover {
+      opacity: 0.8;
+      background: rgba(255, 255, 255, 0.1);
+    }
+  </style>
+</head>
+<body>
+  <div class="mini-container" id="miniContainer">
+    <div class="mini-top">
+      <div class="total-time">
+        <span class="value" id="totalHours">0</span>
+        <span class="unit">时</span>
+        <span class="value" id="totalMinutes">0</span>
+        <span class="unit">分</span>
+      </div>
+      <div class="focus-indicator" id="focusIndicator" title="专注模式">
+        🎯
+      </div>
+    </div>
+    <div class="mini-bottom">
+      <div class="app-icon" id="appIcon">📦</div>
+      <div class="app-info">
+        <div class="app-name" id="appName">暂无数据</div>
+        <div class="app-duration" id="appDuration">0 分钟</div>
+      </div>
+    </div>
+    <div class="switch-btn" id="switchBtn" title="显示主窗口">
+      ⤢
+    </div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron')
+
+    const totalHoursEl = document.getElementById('totalHours')
+    const totalMinutesEl = document.getElementById('totalMinutes')
+    const appIconEl = document.getElementById('appIcon')
+    const appNameEl = document.getElementById('appName')
+    const appDurationEl = document.getElementById('appDuration')
+    const focusIndicatorEl = document.getElementById('focusIndicator')
+    const switchBtnEl = document.getElementById('switchBtn')
+
+    const iconMap = [
+      { patterns: ['chrome', 'edge', 'firefox', 'safari', 'brave', 'opera', 'vivaldi', 'arc'], icon: '🌐', label: '浏览器' },
+      { patterns: ['code', 'vscode', 'visual studio', 'idea', 'pycharm', 'webstorm', 'clion', 'goland', 'rider', 'sublime', 'atom', 'notepad++', 'vim', 'nvim', 'neovim', 'emacs', 'eclipse'], icon: '💻', label: '编辑器' },
+      { patterns: ['cmd', 'powershell', 'terminal', 'iterm', 'konsole', 'gnome-terminal', 'alacritty', 'kitty', 'wezterm', 'windows terminal', 'wt', 'bash', 'zsh', 'fish'], icon: '⌨️', label: '终端' },
+      { patterns: ['spotify', 'qqmusic', 'qq音乐', 'netease', '网易云', 'cloudmusic', 'music', 'itunes', 'apple music', 'foobar', 'aimp', 'vlc'], icon: '🎵', label: '音乐' },
+      { patterns: ['微信', 'wechat', 'qq', 'tim', 'dingtalk', '钉钉', 'slack', 'discord', 'telegram', 'whatsapp', 'messenger', 'teams', 'zoom', '飞书', 'lark'], icon: '💬', label: '通讯' },
+      { patterns: ['explorer', 'finder', '文件', '此电脑', '回收站', 'file manager', 'nautilus', 'dolphin'], icon: '📁', label: '文件' },
+      { patterns: ['word', 'excel', 'powerpoint', 'onenote', 'outlook', 'wps', 'office', 'pages', 'numbers', 'keynote'], icon: '📄', label: '办公' },
+      { patterns: ['photoshop', 'illustrator', 'figma', 'sketch', 'xd', 'blender', 'premiere', 'after effects', '剪映', 'capcut'], icon: '🎨', label: '设计' },
+      { patterns: ['游戏', 'game', 'steam', 'epic', 'minecraft', 'league of legends', 'lol', 'csgo', 'valorant', '原神', 'genshin'], icon: '🎮', label: '游戏' },
+      { patterns: ['mail', 'thunderbird', '邮箱', '邮件'], icon: '📧', label: '邮件' },
+      { patterns: ['calendar', '日历', 'outlook'], icon: '📅', label: '日历' },
+      { patterns: ['settings', '设置', 'control panel', 'system', '任务管理器', 'taskmgr'], icon: '⚙️', label: '系统' },
+      { patterns: ['download', '迅雷', 'motrix', 'aria2', 'qBittorrent', 'bit', 'torrent'], icon: '⬇️', label: '下载' }
+    ]
+
+    function getAppIcon(processName) {
+      if (!processName) return { icon: '📦', label: '暂无' }
+      const name = processName.toLowerCase()
+      for (const item of iconMap) {
+        if (item.patterns.some(p => name.includes(p))) {
+          return item
+        }
+      }
+      return { icon: '📦', label: processName.replace(/\.(exe|app|lnk)$/i, '') }
+    }
+
+    function updateTotalTime(totalMs) {
+      const totalSeconds = Math.floor(totalMs / 1000)
+      const hours = Math.floor(totalSeconds / 3600)
+      const minutes = Math.floor((totalSeconds % 3600) / 60)
+      totalHoursEl.textContent = hours
+      totalMinutesEl.textContent = minutes.toString().padStart(2, '0')
+    }
+
+    function updateCurrentApp(appData) {
+      if (!appData || !appData.processName) {
+        appIconEl.textContent = '📦'
+        appNameEl.textContent = '暂无数据'
+        appDurationEl.textContent = '0 分钟'
+        return
+      }
+      const iconInfo = getAppIcon(appData.processName)
+      appIconEl.textContent = iconInfo.icon
+      appNameEl.textContent = iconInfo.label
+      
+      const duration = appData.duration || 0
+      const minutes = Math.floor(duration / 60000)
+      appDurationEl.textContent = `${minutes} 分钟`
+    }
+
+    function updateFocusStatus(isActive) {
+      if (isActive) {
+        focusIndicatorEl.classList.add('active')
+        focusIndicatorEl.title = '专注模式已开启'
+      } else {
+        focusIndicatorEl.classList.remove('active')
+        focusIndicatorEl.title = '专注模式已关闭'
+      }
+    }
+
+    function checkFocusModeActive(focusRules, currentProcess) {
+      if (!focusRules || focusRules.length === 0 || !currentProcess) return false
+      const now = new Date()
+      
+      function isTimeInRange(currentTime, startTime, endTime) {
+        const [sh, sm] = startTime.split(':').map(Number)
+        const [eh, em] = endTime.split(':').map(Number)
+        const currentMinutes = currentTime.getHours() * 60 + currentTime.getMinutes()
+        const startMinutes = sh * 60 + sm
+        const endMinutes = eh * 60 + em
+        if (startMinutes <= endMinutes) {
+          return currentMinutes >= startMinutes && currentMinutes <= endMinutes
+        } else {
+          return currentMinutes >= startMinutes || currentMinutes <= endMinutes
+        }
+      }
+
+      return focusRules.some(rule => {
+        if (!rule.enabled) return false
+        if (rule.process_name.toLowerCase() !== currentProcess.toLowerCase()) return false
+        return isTimeInRange(now, rule.start_time, rule.end_time)
+      })
+    }
+
+    switchBtnEl.addEventListener('click', (e) => {
+      e.stopPropagation()
+      ipcRenderer.send('mini-window-switch-to-main')
+    })
+
+    ipcRenderer.on('usage-updated', (_event, data) => {
+      if (data && data.currentWindow) {
+        updateCurrentApp({
+          processName: data.currentWindow.processName,
+          windowTitle: data.currentWindow.windowTitle,
+          duration: 0
+        })
+      }
+    })
+
+    ipcRenderer.on('mini-window-update', (_event, data) => {
+      if (data.totalTime !== undefined) {
+        updateTotalTime(data.totalTime)
+      }
+      if (data.currentApp !== undefined) {
+        updateCurrentApp(data.currentApp)
+      }
+      if (data.focusRules !== undefined && data.currentApp) {
+        const isFocusActive = checkFocusModeActive(data.focusRules, data.currentApp.processName)
+        updateFocusStatus(isFocusActive)
+      }
+    })
+
+    ipcRenderer.invoke('mini-window-get-initial-data').then((data) => {
+      if (data) {
+        updateTotalTime(data.totalTime || 0)
+        updateCurrentApp(data.currentApp || null)
+        if (data.focusRules && data.currentApp) {
+          const isFocusActive = checkFocusModeActive(data.focusRules, data.currentApp.processName)
+          updateFocusStatus(isFocusActive)
+        }
+      }
+    }).catch(err => {
+      console.error('获取初始数据失败:', err)
+    })
+  </script>
+</body>
+</html>
