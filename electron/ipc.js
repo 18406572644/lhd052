@@ -21,7 +21,11 @@ const {
   getHealthScatterData,
   getWeeklyHealthReport,
   insertAfkSession,
-  getTodayAfkSessions
+  getTodayAfkSessions,
+  getAllAppCategories,
+  saveAppCategory,
+  getDefaultCategoriesList,
+  getCategoryUsageStats
 } = require('./database')
 
 let miniWindowRef = null
@@ -203,6 +207,23 @@ function registerIpcHandlers() {
       currentApp,
       focusRules
     }
+  })
+
+  ipcMain.handle('get-all-app-categories', () => {
+    return getAllAppCategories()
+  })
+
+  ipcMain.handle('save-app-category', (_event, processName, category) => {
+    saveAppCategory(processName, category)
+    return true
+  })
+
+  ipcMain.handle('get-default-categories', () => {
+    return getDefaultCategoriesList()
+  })
+
+  ipcMain.handle('get-category-usage-stats', (_event, dateStr) => {
+    return getCategoryUsageStats(dateStr)
   })
 }
 

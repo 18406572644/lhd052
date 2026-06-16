@@ -80,7 +80,161 @@ function createTables() {
       value TEXT NOT NULL,
       updated_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS app_categories (
+      process_name TEXT PRIMARY KEY,
+      category TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_app_categories_category ON app_categories(category);
   `)
+
+  seedDefaultCategories()
+}
+
+const DEFAULT_CATEGORIES = ['工作', '社交通讯', '娱乐', '学习', '其他']
+
+const CATEGORY_PATTERNS = {
+  '工作': [
+    'code', 'vscode', 'visual studio', 'idea', 'pycharm', 'webstorm', 'clion', 'goland', 'rider',
+    'sublime', 'atom', 'notepad++', 'vim', 'nvim', 'neovim', 'emacs', 'eclipse',
+    'cmd', 'powershell', 'terminal', 'iterm', 'konsole', 'gnome-terminal', 'alacritty', 'kitty', 'wezterm', 'windows terminal', 'wt', 'bash', 'zsh', 'fish',
+    'word', 'excel', 'powerpoint', 'onenote', 'outlook', 'wps', 'office', 'pages', 'numbers', 'keynote',
+    'photoshop', 'illustrator', 'figma', 'sketch', 'xd', 'blender', 'premiere', 'after effects', '剪映', 'capcut',
+    'mail', 'thunderbird', '邮箱', '邮件',
+    'calendar', '日历',
+    'explorer', 'finder', '文件', '此电脑', '回收站', 'file manager', 'nautilus', 'dolphin'
+  ],
+  '社交通讯': [
+    '微信', 'wechat', 'qq', 'tim', 'dingtalk', '钉钉', 'slack', 'discord',
+    'telegram', 'whatsapp', 'messenger', 'teams', 'zoom', '飞书', 'lark'
+  ],
+  '娱乐': [
+    'spotify', 'qqmusic', 'qq音乐', 'netease', '网易云', 'cloudmusic', 'music', 'itunes', 'apple music', 'foobar', 'aimp', 'vlc',
+    '游戏', 'game', 'steam', 'epic', 'minecraft', 'league of legends', 'lol', 'csgo', 'valorant', '原神', 'genshin',
+    'bilibili', 'b站', '哔哩哔哩', 'youtube', '爱奇艺', '腾讯视频', '优酷', 'netflix', '抖音', 'tiktok'
+  ],
+  '学习': [
+    'notion', 'obsidian', 'anki', 'evernote', '印象笔记', '有道云', 'markdown', 'typora',
+    'coursera', 'udemy', 'mooc', '慕课', '可汗', 'zhihu', '知乎', 'wikipedia', '维基'
+  ]
+}
+
+function getDefaultCategory(processName) {
+  const name = processName.toLowerCase()
+  for (const [category, patterns] of Object.entries(CATEGORY_PATTERNS)) {
+    if (patterns.some(p => name.includes(p.toLowerCase()))) {
+      return category
+    }
+  }
+  return '其他'
+}
+
+function seedDefaultCategories() {
+  if (!db) return
+  try {
+    const stmt = db.prepare(`
+      SELECT DISTINCT process_name FROM usage_logs
+      WHERE process_name NOT IN (SELECT process_name FROM app_categories)
+    `)
+    const rows = stmt.all()
+    const insertStmt = db.prepare(`
+      INSERT OR IGNORE INTO app_categories (process_name, category, updated_at)
+      VALUES (?, ?, ?)
+    `)
+    const now = Date.now()
+    for (const row of rows) {
+      insertStmt.run(row.process_name, getDefaultCategory(row.process_name), now)
+    }
+  } catch (e) {
+    console.error('seed default categories error:', e)
+  }
+}
+
+function getAllAppCategories() {
+  if (!db) return {}
+  const stmt = db.prepare('SELECT process_name, category FROM app_categories')
+  const rows = stmt.all()
+  const result = {}
+  rows.forEach(row => {
+    result[row.process_name] = row.category
+  })
+  return result
+}
+
+function getAppCategory(processName) {
+  if (!db) return null
+  const stmt = db.prepare('SELECT category FROM app_categories WHERE process_name = ?')
+  const row = stmt.get(processName)
+  if (row) return row.category
+  const defaultCat = getDefaultCategory(processName)
+  saveAppCategory(processName, defaultCat)
+  return defaultCat
+}
+
+function saveAppCategory(processName, category) {
+  if (!db) return
+  const stmt = db.prepare(`
+    INSERT INTO app_categories (process_name, category, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(process_name) DO UPDATE SET category = excluded.category, updated_at = excluded.updated_at
+  `)
+  stmt.run(processName, category, Date.now())
+}
+
+function getDefaultCategoriesList() {
+  return [...DEFAULT_CATEGORIES]
+}
+
+function getCategoryUsageStats(dateStr) {
+  if (!db) return []
+  const date = dateStr || new Date().toISOString().split('T')[0]
+  const stmt = db.prepare(`
+    SELECT 
+      COALESCE(ac.category, '其他') as category,
+      SUM(ul.duration) as total_duration,
+      COUNT(DISTINCT ul.process_name) as app_count
+    FROM usage_logs ul
+    LEFT JOIN app_categories ac ON ul.process_name = ac.process_name
+    WHERE ul.date = ?
+    GROUP BY COALESCE(ac.category, '其他')
+    ORDER BY total_duration DESC
+  `)
+  const rows = stmt.all(date)
+  const catMap = {}
+  DEFAULT_CATEGORIES.forEach(c => {
+    catMap[c] = { category: c, total_duration: 0, app_count: 0, apps: [] }
+  })
+  rows.forEach(row => {
+    if (!catMap[row.category]) {
+      catMap[row.category] = { category: row.category, total_duration: 0, app_count: 0, apps: [] }
+    }
+    catMap[row.category].total_duration = row.total_duration
+    catMap[row.category].app_count = row.app_count
+  })
+  const appStmt = db.prepare(`
+    SELECT 
+      ul.process_name,
+      COALESCE(ac.category, '其他') as category,
+      SUM(ul.duration) as total_duration
+    FROM usage_logs ul
+    LEFT JOIN app_categories ac ON ul.process_name = ac.process_name
+    WHERE ul.date = ?
+    GROUP BY ul.process_name, COALESCE(ac.category, '其他')
+    ORDER BY total_duration DESC
+  `)
+  const appRows = appStmt.all(date)
+  appRows.forEach(row => {
+    const cat = row.category
+    if (catMap[cat]) {
+      catMap[cat].apps.push({
+        process_name: row.process_name,
+        total_duration: row.total_duration
+      })
+    }
+  })
+  return Object.values(catMap).filter(c => c.total_duration > 0 || c.app_count > 0)
 }
 
 function insertUsageLog(log) {
@@ -1141,5 +1295,10 @@ module.exports = {
   getSetting,
   setSetting,
   getRestReminderSettings,
-  saveRestReminderSettings
+  saveRestReminderSettings,
+  getAllAppCategories,
+  getAppCategory,
+  saveAppCategory,
+  getDefaultCategoriesList,
+  getCategoryUsageStats
 }

@@ -23,7 +23,13 @@
       <div class="app-content" v-if="activeTab === 'overview'">
         <TotalTimeCard :totalTime="totalTime" />
         <DailyInsights :insights="dailyInsights" class="insights-section" />
-        <AppRankingChart :appUsage="appUsage" class="chart-section" />
+        <AppRankingChart
+          :appUsage="appUsage"
+          :categoryStats="categoryStats"
+          :selectedDate="selectedDate"
+          @update-category="handleCategoryUpdate"
+          class="chart-section"
+        />
         <HourlyHeatmap
           :selectedDate="selectedDate"
           @select-date="handleSelectDate"
@@ -77,6 +83,7 @@ import FullscreenRestReminder from './components/FullscreenRestReminder.vue'
 const activeTab = ref('overview')
 const totalTime = ref(0)
 const appUsage = ref([])
+const categoryStats = ref([])
 const heatmapData = ref(new Array(24).fill(0))
 const focusRules = ref([])
 const dailyInsights = ref([])
@@ -95,10 +102,12 @@ async function loadAllData() {
       totalTime.value = await getDateTotalTime(selectedDate.value)
       appUsage.value = await getDateAppUsage(selectedDate.value)
       heatmapData.value = await window.electronAPI.getDailyHeatmapByDate(selectedDate.value)
+      categoryStats.value = await window.electronAPI.getCategoryUsageStats(selectedDate.value)
     } else {
       totalTime.value = await window.electronAPI.getTodayTotalTime()
       appUsage.value = await window.electronAPI.getTodayAppUsage()
       heatmapData.value = await window.electronAPI.getHourlyHeatmap()
+      categoryStats.value = await window.electronAPI.getCategoryUsageStats()
     }
     focusRules.value = await window.electronAPI.getFocusRules()
     dailyInsights.value = await window.electronAPI.getDailyInsights()
@@ -128,6 +137,10 @@ async function getDateAppUsage(date) {
 
 function handleSelectDate(date) {
   selectedDate.value = date
+  loadAllData()
+}
+
+function handleCategoryUpdate() {
   loadAllData()
 }
 

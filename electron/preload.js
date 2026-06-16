@@ -43,5 +43,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onRestBreakEnd: (callback) => {
     ipcRenderer.on('rest-break-end', (_event, data) => callback(data))
-  }
+  },
+  getAllAppCategories: () => ipcRenderer.invoke('get-all-app-categories'),
+  saveAppCategory: (processName, category) => ipcRenderer.invoke('save-app-category', processName, category),
+  getDefaultCategories: () => ipcRenderer.invoke('get-default-categories'),
+  getCategoryUsageStats: (dateStr) => ipcRenderer.invoke('get-category-usage-stats', dateStr)
 })
