@@ -2,7 +2,8 @@ const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, screen } = require
 const path = require('path')
 const { initDatabase, getTodayTotalTime, getTodayAppUsage, getFocusRules } = require('./database')
 const { registerIpcHandlers, sendMiniWindowUpdate, setMiniWindowRef, setMainModule } = require('./ipc')
-const { startTracker, stopTracker, getCurrentWindow } = require('./tracker')
+const { startTracker, stopTracker, getCurrentWindow, setHealthEngine } = require('./tracker')
+const healthEngine = require('./health-engine')
 
 let mainWindow = null
 let miniWindow = null
@@ -269,6 +270,8 @@ app.whenReady().then(() => {
   createWindow()
   createTray()
   startTracker()
+  setHealthEngine(healthEngine)
+  healthEngine.startHealthEngine()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -289,6 +292,7 @@ app.on('window-all-closed', (e) => {
 
 app.on('before-quit', () => {
   stopTracker()
+  healthEngine.stopHealthEngine()
   if (miniUpdateInterval) {
     clearInterval(miniUpdateInterval)
     miniUpdateInterval = null

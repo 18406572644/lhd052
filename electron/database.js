@@ -40,6 +40,40 @@ function createTables() {
       enabled INTEGER DEFAULT 1,
       created_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS afk_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      start_time INTEGER NOT NULL,
+      end_time INTEGER,
+      duration INTEGER,
+      date TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_afk_sessions_date ON afk_sessions(date);
+
+    CREATE TABLE IF NOT EXISTS body_metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      vision_fatigue INTEGER DEFAULT 0,
+      cervical_comfort INTEGER DEFAULT 0,
+      sleep_quality INTEGER DEFAULT 0,
+      overall_feeling INTEGER DEFAULT 0,
+      notes TEXT,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_body_metrics_date ON body_metrics(date);
+
+    CREATE TABLE IF NOT EXISTS rest_reminders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trigger_time INTEGER NOT NULL,
+      dismissed_time INTEGER,
+      rest_type TEXT DEFAULT 'normal',
+      was_accepted INTEGER DEFAULT 0,
+      date TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_rest_reminders_date ON rest_reminders(date);
   `)
 }
 
@@ -569,6 +603,452 @@ function getDateRangeHeatmap(range) {
   }
 }
 
+function insertAfkSession(session) {
+  if (!db) return null
+  const stmt = db.prepare(`
+    INSERT INTO afk_sessions (start_time, end_time, duration, date)
+    VALUES (@start_time, @end_time, @duration, @date)
+  `)
+  const result = stmt.run(session)
+  return result.lastInsertRowid
+}
+
+function closeOpenAfkSession(endTime) {
+  if (!db) return
+  const stmt = db.prepare(`
+    SELECT id, start_time FROM afk_sessions WHERE end_time IS NULL ORDER BY start_time DESC LIMIT 1
+  `)
+  const row = stmt.get()
+  if (row) {
+    const duration = endTime - row.start_time
+    const updateStmt = db.prepare(`
+      UPDATE afk_sessions SET end_time = ?, duration = ? WHERE id = ?
+    `)
+    updateStmt.run(endTime, duration, row.id)
+  }
+}
+
+function getTodayAfkSessions() {
+  if (!db) return []
+  const today = new Date().toISOString().split('T')[0]
+  const stmt = db.prepare(`
+    SELECT * FROM afk_sessions WHERE date = ? ORDER BY start_time ASC
+  `)
+  return stmt.all(today)
+}
+
+function getAfkSessionsByDate(dateStr) {
+  if (!db) return []
+  const stmt = db.prepare(`
+    SELECT * FROM afk_sessions WHERE date = ? ORDER BY start_time ASC
+  `)
+  return stmt.all(dateStr)
+}
+
+function insertBodyMetric(metric) {
+  if (!db) return null
+  const today = metric.date || new Date().toISOString().split('T')[0]
+  const existing = db.prepare(`
+    SELECT id FROM body_metrics WHERE date = ? LIMIT 1
+  `).get(today)
+  if (existing) {
+    const stmt = db.prepare(`
+      UPDATE body_metrics SET
+        vision_fatigue = @vision_fatigue,
+        cervical_comfort = @cervical_comfort,
+        sleep_quality = @sleep_quality,
+        overall_feeling = @overall_feeling,
+        notes = @notes
+      WHERE id = ?
+    `)
+    stmt.run({
+      vision_fatigue: metric.vision_fatigue || 0,
+      cervical_comfort: metric.cervical_comfort || 0,
+      sleep_quality: metric.sleep_quality || 0,
+      overall_feeling: metric.overall_feeling || 0,
+      notes: metric.notes || '',
+      id: existing.id
+    })
+    return existing.id
+  }
+  const stmt = db.prepare(`
+    INSERT INTO body_metrics (date, vision_fatigue, cervical_comfort, sleep_quality, overall_feeling, notes, created_at)
+    VALUES (@date, @vision_fatigue, @cervical_comfort, @sleep_quality, @overall_feeling, @notes, @created_at)
+  `)
+  const result = stmt.run({
+    date: today,
+    vision_fatigue: metric.vision_fatigue || 0,
+    cervical_comfort: metric.cervical_comfort || 0,
+    sleep_quality: metric.sleep_quality || 0,
+    overall_feeling: metric.overall_feeling || 0,
+    notes: metric.notes || '',
+    created_at: Date.now()
+  })
+  return result.lastInsertRowid
+}
+
+function getBodyMetricByDate(dateStr) {
+  if (!db) return null
+  const stmt = db.prepare(`SELECT * FROM body_metrics WHERE date = ?`)
+  return stmt.get(dateStr)
+}
+
+function getBodyMetricsRange(days) {
+  if (!db) return []
+  const dates = []
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400000)
+    dates.push(d.toISOString().split('T')[0])
+  }
+  const placeholders = dates.map(() => '?').join(',')
+  const stmt = db.prepare(`
+    SELECT * FROM body_metrics WHERE date IN (${placeholders}) ORDER BY date ASC
+  `)
+  return stmt.all(...dates)
+}
+
+function insertRestReminder(reminder) {
+  if (!db) return null
+  const stmt = db.prepare(`
+    INSERT INTO rest_reminders (trigger_time, dismissed_time, rest_type, was_accepted, date)
+    VALUES (@trigger_time, @dismissed_time, @rest_type, @was_accepted, @date)
+  `)
+  const result = stmt.run(reminder)
+  return result.lastInsertRowid
+}
+
+function updateRestReminder(id, updates) {
+  if (!db) return
+  const fields = []
+  const values = { id }
+  if (updates.dismissed_time !== undefined) {
+    fields.push('dismissed_time = @dismissed_time')
+    values.dismissed_time = updates.dismissed_time
+  }
+  if (updates.was_accepted !== undefined) {
+    fields.push('was_accepted = @was_accepted')
+    values.was_accepted = updates.was_accepted ? 1 : 0
+  }
+  if (fields.length === 0) return
+  const stmt = db.prepare(`UPDATE rest_reminders SET ${fields.join(', ')} WHERE id = @id`)
+  stmt.run(values)
+}
+
+function getTodayRestReminders() {
+  if (!db) return []
+  const today = new Date().toISOString().split('T')[0]
+  const stmt = db.prepare(`SELECT * FROM rest_reminders WHERE date = ? ORDER BY trigger_time ASC`)
+  return stmt.all(today)
+}
+
+function getRestRemindersByDate(dateStr) {
+  if (!db) return []
+  const stmt = db.prepare(`SELECT * FROM rest_reminders WHERE date = ? ORDER BY trigger_time ASC`)
+  return stmt.all(dateStr)
+}
+
+function getHealthDashboardData() {
+  const today = new Date().toISOString().split('T')[0]
+  const totalDuration = getTodayTotalTime()
+  const heatmap = getHourlyHeatmap()
+  const afkSessions = getTodayAfkSessions()
+  const restReminders = getTodayRestReminders()
+
+  const longestContinuous = getLongestContinuousSession()
+
+  let highIntensityDuration = 0
+  for (let h = 9; h <= 18; h++) {
+    highIntensityDuration += heatmap[h] || 0
+  }
+  const highIntensityRatio = totalDuration > 0 ? highIntensityDuration / totalDuration : 0
+
+  const longestDuration = longestContinuous ? longestContinuous.duration : 0
+  const intensityScore = Math.min(40, (totalDuration / (8 * 3600000)) * 40)
+  const continuousScore = Math.min(35, (longestDuration / (3 * 3600000)) * 35)
+  const highIntensityScore = Math.min(25, highIntensityRatio * 25)
+  const eyeStrainScore = Math.round(Math.min(100, intensityScore + continuousScore + highIntensityScore))
+
+  const activeBreakCount = afkSessions.filter(s => s.duration && s.duration >= 60000).length
+  const avgRestDuration = activeBreakCount > 0
+    ? afkSessions.filter(s => s.duration && s.duration >= 60000).reduce((sum, s) => sum + s.duration, 0) / activeBreakCount
+    : 0
+  const totalRestDuration = afkSessions.filter(s => s.duration && s.duration >= 60000).reduce((sum, s) => sum + s.duration, 0)
+  const restRatio = (totalDuration + totalRestDuration) > 0 ? totalRestDuration / (totalDuration + totalRestDuration) : 0
+
+  const usageLogs = db.prepare(`
+    SELECT start_time, end_time, duration FROM usage_logs WHERE date = ? ORDER BY start_time ASC
+  `).all(today)
+
+  let sedentarySegments = 0
+  let segmentStart = null
+  let segmentDuration = 0
+  for (const log of usageLogs) {
+    if (!segmentStart) {
+      segmentStart = log.start_time
+      segmentDuration = log.duration
+    } else if (log.start_time - (segmentStart + segmentDuration) < 180000) {
+      segmentDuration = log.end_time - segmentStart
+    } else {
+      if (segmentDuration >= 45 * 60000) sedentarySegments++
+      segmentStart = log.start_time
+      segmentDuration = log.duration
+    }
+  }
+  if (segmentDuration >= 45 * 60000) sedentarySegments++
+
+  const suggestedStandUps = Math.max(0, sedentarySegments)
+
+  const now = new Date()
+  const currentHour = now.getHours()
+  let blueLightWeight
+  if (currentHour >= 6 && currentHour < 17) {
+    blueLightWeight = 1.0
+  } else if (currentHour >= 17 && currentHour < 20) {
+    blueLightWeight = 1.5
+  } else {
+    blueLightWeight = 2.5
+  }
+  const screenHours = totalDuration / 3600000
+  const blueLightExposure = Math.round(screenHours * blueLightWeight * 10) / 10
+  const isNightHighIntensity = currentHour >= 20 && totalDuration > 2 * 3600000
+
+  return {
+    eyeStrain: {
+      score: eyeStrainScore,
+      totalDuration,
+      longestContinuousDuration: longestDuration,
+      highIntensityRatio: Math.round(highIntensityRatio * 100),
+      breakdown: {
+        intensityScore: Math.round(intensityScore),
+        continuousScore: Math.round(continuousScore),
+        highIntensityScore: Math.round(highIntensityScore)
+      }
+    },
+    restBehavior: {
+      activeBreakCount,
+      avgRestDuration,
+      restRatio: Math.round(restRatio * 100),
+      targetRestRatio: 10,
+      totalRestDuration
+    },
+    sedentary: {
+      segments: sedentarySegments,
+      suggestedStandUps,
+      threshold: 45
+    },
+    blueLight: {
+      exposure: blueLightExposure,
+      weight: blueLightWeight,
+      timeSlot: currentHour >= 6 && currentHour < 17 ? 'daytime' : currentHour >= 17 && currentHour < 20 ? 'evening' : 'night',
+      isNightHighIntensity,
+      screenHours: Math.round(screenHours * 10) / 10
+    }
+  }
+}
+
+function getHealthScatterData(metricType, days) {
+  if (!db) return { points: [], trendLine: null }
+  const dates = []
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400000)
+    dates.push(d.toISOString().split('T')[0])
+  }
+  const placeholders = dates.map(() => '?').join(',')
+  const metrics = db.prepare(`
+    SELECT * FROM body_metrics WHERE date IN (${placeholders}) ORDER BY date ASC
+  `).all(...dates)
+
+  const durations = {}
+  for (const date of dates) {
+    const stmt = db.prepare(`SELECT COALESCE(SUM(duration), 0) as total FROM usage_logs WHERE date = ?`)
+    const result = stmt.get(date)
+    durations[date] = result.total
+  }
+
+  const sedentaryMap = {}
+  for (const date of dates) {
+    const logs = db.prepare(`SELECT start_time, end_time, duration FROM usage_logs WHERE date = ? ORDER BY start_time ASC`).all(date)
+    let segs = 0
+    let segStart = null
+    let segDur = 0
+    for (const log of logs) {
+      if (!segStart) {
+        segStart = log.start_time
+        segDur = log.duration
+      } else if (log.start_time - (segStart + segDur) < 180000) {
+        segDur = log.end_time - segStart
+      } else {
+        if (segDur >= 45 * 60000) segs++
+        segStart = log.start_time
+        segDur = log.duration
+      }
+    }
+    if (segDur >= 45 * 60000) segs++
+    sedentaryMap[date] = segs
+  }
+
+  const points = []
+  for (const metric of metrics) {
+    const screenHours = (durations[metric.date] || 0) / 3600000
+    const sedentarySegs = sedentaryMap[metric.date] || 0
+    if (metricType === 'vision') {
+      points.push({ x: Math.round(screenHours * 10) / 10, y: metric.vision_fatigue, date: metric.date })
+    } else if (metricType === 'cervical') {
+      points.push({ x: sedentarySegs, y: metric.cervical_comfort, date: metric.date })
+    }
+  }
+
+  let trendLine = null
+  if (points.length >= 2) {
+    const n = points.length
+    const sumX = points.reduce((s, p) => s + p.x, 0)
+    const sumY = points.reduce((s, p) => s + p.y, 0)
+    const sumXY = points.reduce((s, p) => s + p.x * p.y, 0)
+    const sumX2 = points.reduce((s, p) => s + p.x * p.x, 0)
+    const denom = n * sumX2 - sumX * sumX
+    if (Math.abs(denom) > 0.001) {
+      const slope = (n * sumXY - sumX * sumY) / denom
+      const intercept = (sumY - slope * sumX) / n
+      const xMin = Math.min(...points.map(p => p.x))
+      const xMax = Math.max(...points.map(p => p.x))
+      trendLine = {
+        slope: Math.round(slope * 100) / 100,
+        intercept: Math.round(intercept * 100) / 100,
+        start: { x: xMin, y: Math.round((slope * xMin + intercept) * 10) / 10 },
+        end: { x: xMax, y: Math.round((slope * xMax + intercept) * 10) / 10 }
+      }
+    }
+  }
+
+  return { points, trendLine }
+}
+
+function getWeeklyHealthReport() {
+  if (!db) return null
+  const now = new Date()
+  const dayOfWeek = now.getDay() || 7
+  const dates = []
+  for (let i = dayOfWeek - 1; i >= 0; i--) {
+    const d = new Date(now)
+    d.setDate(now.getDate() - i)
+    dates.push(d.toISOString().split('T')[0])
+  }
+
+  const dailyData = []
+  let totalScreenTime = 0
+  let totalSedentary = 0
+  let totalRestRatio = 0
+  let lateNightDays = 0
+
+  for (const date of dates) {
+    const heatmap = getDailyHeatmapByDate(date)
+    const dayTotal = heatmap.reduce((s, v) => s + v, 0)
+    totalScreenTime += dayTotal
+
+    const nightDuration = (heatmap[22] || 0) + (heatmap[23] || 0) + (heatmap[0] || 0) + (heatmap[1] || 0)
+    if (nightDuration > 30 * 60000) lateNightDays++
+
+    const logs = db.prepare(`SELECT start_time, end_time, duration FROM usage_logs WHERE date = ? ORDER BY start_time ASC`).all(date)
+    let segs = 0
+    let segStart = null
+    let segDur = 0
+    for (const log of logs) {
+      if (!segStart) {
+        segStart = log.start_time
+        segDur = log.duration
+      } else if (log.start_time - (segStart + segDur) < 180000) {
+        segDur = log.end_time - segStart
+      } else {
+        if (segDur >= 45 * 60000) segs++
+        segStart = log.start_time
+        segDur = log.duration
+      }
+    }
+    if (segDur >= 45 * 60000) segs++
+    totalSedentary += segs
+
+    const afkSessions = getAfkSessionsByDate(date)
+    const totalRest = afkSessions.filter(s => s.duration && s.duration >= 60000).reduce((sum, s) => sum + s.duration, 0)
+    const restRatio = (dayTotal + totalRest) > 0 ? totalRest / (dayTotal + totalRest) : 0
+    totalRestRatio += restRatio
+
+    dailyData.push({
+      date,
+      screenTime: dayTotal,
+      sedentarySegments: segs,
+      restRatio,
+      nightDuration
+    })
+  }
+
+  const avgScreenTime = dates.length > 0 ? totalScreenTime / dates.length : 0
+  const avgSedentary = dates.length > 0 ? totalSedentary / dates.length : 0
+  const avgRestRatio = dates.length > 0 ? totalRestRatio / dates.length : 0
+
+  const screenScore = Math.max(0, 40 - (avgScreenTime / (6 * 3600000)) * 40)
+  const sedentaryScore = Math.max(0, 30 - avgSedentary * 5)
+  const restScore = Math.min(20, avgRestRatio * 200)
+  const nightScore = Math.max(0, 10 - lateNightDays * 3)
+  const totalScore = Math.round(screenScore + sedentaryScore + restScore + nightScore)
+
+  let grade
+  if (totalScore >= 80) grade = 'A'
+  else if (totalScore >= 60) grade = 'B'
+  else if (totalScore >= 40) grade = 'C'
+  else grade = 'D'
+
+  const suggestions = []
+  if (avgScreenTime > 8 * 3600000) {
+    suggestions.push('你本周平均每日屏幕时长超过 8 小时，建议每工作 1 小时起身活动 5-10 分钟')
+  }
+  if (avgSedentary >= 3) {
+    suggestions.push(`本周日均久坐段数 ${Math.round(avgSedentary)} 次，建议设置每 45 分钟一次的站立提醒`)
+  }
+  if (avgRestRatio < 0.1) {
+    suggestions.push('本周休息时长占比不足 10%，目标应 ≥ 10%，请增加主动休息次数')
+  }
+  if (lateNightDays >= 2) {
+    const nightLogs = []
+    for (const date of dates) {
+      const logs = db.prepare(`SELECT end_time FROM usage_logs WHERE date = ? AND hour >= 22 ORDER BY end_time DESC LIMIT 1`).all(date)
+      if (logs.length > 0) {
+        const t = new Date(logs[0].end_time)
+        nightLogs.push(`${t.getHours()}:${String(t.getMinutes()).padStart(2, '0')}`)
+      }
+    }
+    if (nightLogs.length > 0) {
+      const avgLate = nightLogs.reduce((s, t) => {
+        const [h, m] = t.split(':').map(Number)
+        return s + h + m / 60
+      }, 0) / nightLogs.length
+      const avgHour = Math.floor(avgLate)
+      const avgMin = Math.round((avgLate - avgHour) * 60)
+      suggestions.push(`你本周平均凌晨 ${avgHour}:${String(avgMin).padStart(2, '0')} 才关闭电脑，建议将睡前屏幕时间控制在 23:30 前，预计可改善入睡质量`)
+    }
+  }
+  if (suggestions.length === 0) {
+    suggestions.push('本周健康表现良好，继续保持规律作息和适时休息的习惯！')
+  }
+
+  return {
+    grade,
+    totalScore,
+    scores: {
+      screen: Math.round(screenScore),
+      sedentary: Math.round(sedentaryScore),
+      rest: Math.round(restScore),
+      night: Math.round(nightScore)
+    },
+    avgScreenTime,
+    avgSedentary: Math.round(avgSedentary * 10) / 10,
+    avgRestRatio: Math.round(avgRestRatio * 100),
+    lateNightDays,
+    daysTracked: dates.length,
+    dailyData,
+    suggestions
+  }
+}
+
 module.exports = {
   initDatabase,
   insertUsageLog,
@@ -590,5 +1070,19 @@ module.exports = {
   getLast30DaysHeatmap,
   getHourlyAppUsage,
   getDateRangeHeatmap,
-  getDateAppUsage
+  getDateAppUsage,
+  insertAfkSession,
+  closeOpenAfkSession,
+  getTodayAfkSessions,
+  getAfkSessionsByDate,
+  insertBodyMetric,
+  getBodyMetricByDate,
+  getBodyMetricsRange,
+  insertRestReminder,
+  updateRestReminder,
+  getTodayRestReminders,
+  getRestRemindersByDate,
+  getHealthDashboardData,
+  getHealthScatterData,
+  getWeeklyHealthReport
 }

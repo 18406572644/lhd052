@@ -19,5 +19,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDateRangeHeatmap: (range) => ipcRenderer.invoke('get-date-range-heatmap', range),
   getHourlyAppUsage: (date, hour) => ipcRenderer.invoke('get-hourly-app-usage', date, hour),
   getDailyHeatmapByDate: (date) => ipcRenderer.invoke('get-daily-heatmap-by-date', date),
-  getDateAppUsage: (date) => ipcRenderer.invoke('get-date-app-usage', date)
+  getDateAppUsage: (date) => ipcRenderer.invoke('get-date-app-usage', date),
+  getHealthDashboard: () => ipcRenderer.invoke('get-health-dashboard'),
+  saveBodyMetric: (metric) => ipcRenderer.invoke('save-body-metric', metric),
+  getBodyMetric: (date) => ipcRenderer.invoke('get-body-metric', date),
+  getBodyMetricsRange: (days) => ipcRenderer.invoke('get-body-metrics-range', days),
+  getHealthScatter: (metricType, days) => ipcRenderer.invoke('get-health-scatter', metricType, days),
+  getWeeklyHealthReport: () => ipcRenderer.invoke('get-weekly-health-report'),
+  getTodayRestReminders: () => ipcRenderer.invoke('get-today-rest-reminders'),
+  dismissRestReminder: (reminderId, accepted) => ipcRenderer.invoke('dismiss-rest-reminder', reminderId, accepted),
+  getHealthEngineStatus: () => ipcRenderer.invoke('get-health-engine-status'),
+  onRestReminder: (callback) => {
+    ipcRenderer.on('rest-reminder', (_event, data) => callback(data))
+  }
 })

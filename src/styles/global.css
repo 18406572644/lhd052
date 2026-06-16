@@ -9,6 +9,11 @@
   --text-muted: #6b7a8c;
   --border-color: rgba(102, 252, 184, 0.15);
   --danger-color: #ff6b6b;
+  --warning-color: #fbbf24;
+  --health-green: #66fcb8;
+  --health-yellow: #fbbf24;
+  --health-orange: #fb923c;
+  --health-red: #ff6b6b;
   --heatmap-level-0: rgba(102, 252, 184, 0.08);
   --heatmap-level-1: rgba(102, 252, 184, 0.2);
   --heatmap-level-2: rgba(102, 252, 184, 0.4);

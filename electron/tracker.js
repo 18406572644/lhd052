@@ -5,6 +5,11 @@ let trackerInterval = null
 let currentWindow = null
 let currentWindowStart = null
 let lastAlertProcesses = new Set()
+let healthEngineRef = null
+
+function setHealthEngine(engine) {
+  healthEngineRef = engine
+}
 
 async function getActiveWindow() {
   try {
@@ -72,6 +77,10 @@ async function tick() {
 
   if (activeWindow) {
     checkFocusRules(activeWindow.processName)
+
+    if (healthEngineRef && typeof healthEngineRef.recordActivity === 'function') {
+      healthEngineRef.recordActivity()
+    }
 
     if (currentWindow &&
         currentWindow.processName === activeWindow.processName &&
@@ -155,5 +164,6 @@ function getCurrentWindowInfo() {
 module.exports = {
   startTracker,
   stopTracker,
-  getCurrentWindow: getCurrentWindowInfo
+  getCurrentWindow: getCurrentWindowInfo,
+  setHealthEngine
 }

@@ -10,7 +10,18 @@ const {
   getDateRangeHeatmap,
   getHourlyAppUsage,
   getDailyHeatmapByDate,
-  getDateAppUsage
+  getDateAppUsage,
+  insertBodyMetric,
+  getBodyMetricByDate,
+  getBodyMetricsRange,
+  insertRestReminder,
+  updateRestReminder,
+  getTodayRestReminders,
+  getHealthDashboardData,
+  getHealthScatterData,
+  getWeeklyHealthReport,
+  insertAfkSession,
+  getTodayAfkSessions
 } = require('./database')
 
 let miniWindowRef = null
@@ -59,6 +70,45 @@ function registerIpcHandlers() {
 
   ipcMain.handle('get-date-app-usage', (_event, date) => {
     return getDateAppUsage(date)
+  })
+
+  ipcMain.handle('get-health-dashboard', () => {
+    return getHealthDashboardData()
+  })
+
+  ipcMain.handle('save-body-metric', (_event, metric) => {
+    return insertBodyMetric(metric)
+  })
+
+  ipcMain.handle('get-body-metric', (_event, date) => {
+    return getBodyMetricByDate(date)
+  })
+
+  ipcMain.handle('get-body-metrics-range', (_event, days) => {
+    return getBodyMetricsRange(days)
+  })
+
+  ipcMain.handle('get-health-scatter', (_event, metricType, days) => {
+    return getHealthScatterData(metricType, days)
+  })
+
+  ipcMain.handle('get-weekly-health-report', () => {
+    return getWeeklyHealthReport()
+  })
+
+  ipcMain.handle('get-today-rest-reminders', () => {
+    return getTodayRestReminders()
+  })
+
+  ipcMain.handle('dismiss-rest-reminder', (_event, reminderId, accepted) => {
+    const { dismissRestReminder } = require('./health-engine')
+    dismissRestReminder(accepted)
+    return true
+  })
+
+  ipcMain.handle('get-health-engine-status', () => {
+    const { getHealthEngineStatus } = require('./health-engine')
+    return getHealthEngineStatus()
   })
 
   ipcMain.handle('save-focus-rule', (_event, rule) => {
@@ -141,6 +191,13 @@ function sendFocusAlert(data) {
   })
 }
 
+function sendRestReminder(data) {
+  const windows = BrowserWindow.getAllWindows()
+  windows.forEach(win => {
+    win.webContents.send('rest-reminder', data)
+  })
+}
+
 function sendMiniWindowUpdate(data) {
   if (miniWindowRef && miniWindowRef.webContents && !miniWindowRef.isDestroyed()) {
     miniWindowRef.webContents.send('mini-window-update', data)
@@ -151,6 +208,7 @@ module.exports = {
   registerIpcHandlers,
   sendUsageUpdate,
   sendFocusAlert,
+  sendRestReminder,
   sendMiniWindowUpdate,
   setMiniWindowRef,
   setMainModule
