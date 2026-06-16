@@ -4,9 +4,11 @@ const {
   insertRestReminder,
   updateRestReminder,
   getHealthDashboardData,
-  getTodayRestReminders
+  getTodayRestReminders,
+  getRestReminderSettings,
+  saveRestReminderSettings
 } = require('./database')
-const { sendRestReminder } = require('./ipc')
+const { sendRestReminder, sendRestBreakStart, sendRestBreakEnd } = require('./ipc')
 
 const AFK_THRESHOLD = 180000
 const MIN_REST_INTERVAL = 1200000
@@ -20,6 +22,15 @@ let afkStartTime = null
 let activityBuffer = []
 let healthEngineInterval = null
 let currentReminderId = null
+
+let consecutiveStartTime = Date.now()
+let isResting = false
+let restEndTime = null
+let restTimer = null
+let isSkipped = false
+let skipEndTime = null
+let trackerRef = null
+let reminderShown = false
 
 function recordActivity() {
   const now = Date.now()
@@ -168,6 +179,154 @@ function stopHealthEngine() {
   console.log('健康引擎已停止')
 }
 
+function getConsecutiveUsageTime() {
+  if (isResting) return 0
+  const now = Date.now()
+  return now - consecutiveStartTime
+}
+
+function checkScheduledRestReminder() {
+  const settings = getRestReminderSettings()
+  if (!settings.enabled) return
+
+  if (isResting) return
+
+  if (reminderShown) return
+
+  if (isSkipped && skipEndTime) {
+    if (Date.now() < skipEndTime) {
+      return
+    }
+    isSkipped = false
+    skipEndTime = null
+    consecutiveStartTime = Date.now()
+  }
+
+  const consecutiveTime = getConsecutiveUsageTime()
+  const workDurationMs = settings.workDuration * 60 * 1000
+
+  if (consecutiveTime >= workDurationMs) {
+    triggerScheduledRestReminder()
+  }
+}
+
+function triggerScheduledRestReminder() {
+  const settings = getRestReminderSettings()
+  const now = Date.now()
+  const consecutiveMinutes = Math.floor((now - consecutiveStartTime) / 60000)
+
+  reminderShown = true
+
+  const reminderId = insertRestReminder({
+    trigger_time: now,
+    dismissed_time: null,
+    rest_type: 'scheduled',
+    was_accepted: 0,
+    date: new Date(now).toISOString().split('T')[0]
+  })
+
+  currentReminderId = reminderId
+
+  sendRestReminder({
+    id: reminderId,
+    type: 'scheduled',
+    consecutiveMinutes: consecutiveMinutes,
+    restDuration: settings.restDuration,
+    timestamp: now
+  })
+}
+
+function setTracker(tracker) {
+  trackerRef = tracker
+}
+
+function startRestBreak() {
+  const settings = getRestReminderSettings()
+  const now = Date.now()
+
+  isResting = true
+  restEndTime = now + settings.restDuration * 60 * 1000
+
+  if (currentReminderId) {
+    updateRestReminder(currentReminderId, {
+      dismissed_time: now,
+      was_accepted: 1
+    })
+  }
+
+  if (trackerRef && typeof trackerRef.pauseTracker === 'function') {
+    trackerRef.pauseTracker()
+  }
+
+  sendRestBreakStart({
+    restDuration: settings.restDuration,
+    endTime: restEndTime,
+    startTime: now
+  })
+
+  if (restTimer) clearTimeout(restTimer)
+  restTimer = setTimeout(() => {
+    endRestBreak()
+  }, settings.restDuration * 60 * 1000)
+}
+
+function endRestBreak() {
+  isResting = false
+  restEndTime = null
+  reminderShown = false
+  if (restTimer) {
+    clearTimeout(restTimer)
+    restTimer = null
+  }
+
+  if (trackerRef && typeof trackerRef.resumeTracker === 'function') {
+    trackerRef.resumeTracker()
+  }
+
+  consecutiveStartTime = Date.now()
+
+  sendRestBreakEnd({
+    endTime: Date.now()
+  })
+}
+
+function skipRestBreak() {
+  const settings = getRestReminderSettings()
+  isSkipped = true
+  skipEndTime = Date.now() + settings.workDuration * 60 * 1000
+  reminderShown = false
+
+  if (currentReminderId) {
+    updateRestReminder(currentReminderId, {
+      dismissed_time: Date.now(),
+      was_accepted: 0
+    })
+    currentReminderId = null
+  }
+
+  if (isResting) {
+    endRestBreak()
+  }
+}
+
+function getRestBreakStatus() {
+  return {
+    isResting,
+    restEndTime,
+    consecutiveUsageTime: getConsecutiveUsageTime(),
+    isSkipped,
+    settings: getRestReminderSettings()
+  }
+}
+
+function updateSettings(newSettings) {
+  saveRestReminderSettings(newSettings)
+  if (!isResting && !isSkipped) {
+    consecutiveStartTime = Date.now()
+  }
+  return getRestReminderSettings()
+}
+
 function getHealthEngineStatus() {
   return {
     isRunning: healthEngineInterval !== null,
@@ -176,7 +335,29 @@ function getHealthEngineStatus() {
     isAfk,
     activityFrequency: getActivityFrequency(),
     isGoldenFocusPeriod: isInGoldenFocusPeriod(),
-    nextRestInterval: calculateNextRestInterval()
+    nextRestInterval: calculateNextRestInterval(),
+    restBreak: getRestBreakStatus()
+  }
+}
+
+function checkRestReminder() {
+  const now = Date.now()
+  const timeSinceLastActivity = now - lastActivityTime
+
+  if (timeSinceLastActivity > AFK_THRESHOLD) {
+    if (!isAfk) {
+      isAfk = true
+      afkStartTime = lastActivityTime
+      consecutiveStartTime = now
+    }
+    return
+  }
+
+  checkScheduledRestReminder()
+
+  const nextInterval = calculateNextRestInterval()
+  if (now - lastRestReminderTime >= nextInterval) {
+    triggerRestReminder()
   }
 }
 
@@ -186,5 +367,12 @@ module.exports = {
   recordActivity,
   dismissRestReminder,
   getHealthEngineStatus,
-  checkRestReminder
+  checkRestReminder,
+  startRestBreak,
+  endRestBreak,
+  skipRestBreak,
+  getRestBreakStatus,
+  updateSettings,
+  getRestReminderSettings,
+  setTracker
 }

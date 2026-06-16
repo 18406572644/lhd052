@@ -29,7 +29,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getTodayRestReminders: () => ipcRenderer.invoke('get-today-rest-reminders'),
   dismissRestReminder: (reminderId, accepted) => ipcRenderer.invoke('dismiss-rest-reminder', reminderId, accepted),
   getHealthEngineStatus: () => ipcRenderer.invoke('get-health-engine-status'),
+  getRestReminderSettings: () => ipcRenderer.invoke('get-rest-reminder-settings'),
+  saveRestReminderSettings: (settings) => ipcRenderer.invoke('save-rest-reminder-settings', settings),
+  startRestBreak: () => ipcRenderer.invoke('start-rest-break'),
+  endRestBreak: () => ipcRenderer.invoke('end-rest-break'),
+  skipRestBreak: () => ipcRenderer.invoke('skip-rest-break'),
+  getRestBreakStatus: () => ipcRenderer.invoke('get-rest-break-status'),
   onRestReminder: (callback) => {
     ipcRenderer.on('rest-reminder', (_event, data) => callback(data))
+  },
+  onRestBreakStart: (callback) => {
+    ipcRenderer.on('rest-break-start', (_event, data) => callback(data))
+  },
+  onRestBreakEnd: (callback) => {
+    ipcRenderer.on('rest-break-end', (_event, data) => callback(data))
   }
 })

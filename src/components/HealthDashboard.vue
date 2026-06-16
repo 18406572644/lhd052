@@ -15,6 +15,7 @@
       <RestBehaviorCard :restBehavior="healthData.restBehavior" />
       <SedentaryCard :sedentary="healthData.sedentary" />
       <BlueLightCard :blueLight="healthData.blueLight" />
+      <RestReminderSettings />
       <button class="metrics-btn" @click="activeSubTab = 'metrics'">
         记录身体指标 →
       </button>
@@ -45,6 +46,7 @@ import EyeStrainCard from './EyeStrainCard.vue'
 import RestBehaviorCard from './RestBehaviorCard.vue'
 import SedentaryCard from './SedentaryCard.vue'
 import BlueLightCard from './BlueLightCard.vue'
+import RestReminderSettings from './RestReminderSettings.vue'
 
 const BodyMetricsInput = defineAsyncComponent(() =>
   import('./BodyMetricsInput.vue').catch(() => null)

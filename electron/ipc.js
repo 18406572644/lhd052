@@ -111,6 +111,39 @@ function registerIpcHandlers() {
     return getHealthEngineStatus()
   })
 
+  ipcMain.handle('get-rest-reminder-settings', () => {
+    const { getRestReminderSettings } = require('./health-engine')
+    return getRestReminderSettings()
+  })
+
+  ipcMain.handle('save-rest-reminder-settings', (_event, settings) => {
+    const { updateSettings } = require('./health-engine')
+    return updateSettings(settings)
+  })
+
+  ipcMain.handle('start-rest-break', () => {
+    const { startRestBreak } = require('./health-engine')
+    startRestBreak()
+    return true
+  })
+
+  ipcMain.handle('end-rest-break', () => {
+    const { endRestBreak } = require('./health-engine')
+    endRestBreak()
+    return true
+  })
+
+  ipcMain.handle('skip-rest-break', () => {
+    const { skipRestBreak } = require('./health-engine')
+    skipRestBreak()
+    return true
+  })
+
+  ipcMain.handle('get-rest-break-status', () => {
+    const { getRestBreakStatus } = require('./health-engine')
+    return getRestBreakStatus()
+  })
+
   ipcMain.handle('save-focus-rule', (_event, rule) => {
     const result = saveFocusRule(rule)
     if (miniWindowRef && miniWindowRef.webContents) {
@@ -195,6 +228,28 @@ function sendRestReminder(data) {
   const windows = BrowserWindow.getAllWindows()
   windows.forEach(win => {
     win.webContents.send('rest-reminder', data)
+    if (!win.isVisible()) {
+      win.show()
+    }
+    win.focus()
+  })
+}
+
+function sendRestBreakStart(data) {
+  const windows = BrowserWindow.getAllWindows()
+  windows.forEach(win => {
+    win.webContents.send('rest-break-start', data)
+    if (!win.isVisible()) {
+      win.show()
+    }
+    win.focus()
+  })
+}
+
+function sendRestBreakEnd(data) {
+  const windows = BrowserWindow.getAllWindows()
+  windows.forEach(win => {
+    win.webContents.send('rest-break-end', data)
   })
 }
 
@@ -209,6 +264,8 @@ module.exports = {
   sendUsageUpdate,
   sendFocusAlert,
   sendRestReminder,
+  sendRestBreakStart,
+  sendRestBreakEnd,
   sendMiniWindowUpdate,
   setMiniWindowRef,
   setMainModule

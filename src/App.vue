@@ -50,6 +50,14 @@
       @close="handleRestDismiss"
       @accept="handleRestAccept"
     />
+    <FullscreenRestReminder
+      v-if="showFullscreenRestReminder"
+      :visible="showFullscreenRestReminder"
+      :reminderData="fullscreenRestData"
+      @close="handleFullscreenRestClose"
+      @skip="handleFullscreenRestSkip"
+      @start="handleFullscreenRestStart"
+    />
   </div>
 </template>
 
@@ -64,6 +72,7 @@ import FocusModePanel from './components/FocusModePanel.vue'
 import FocusAlertModal from './components/FocusAlertModal.vue'
 import HealthDashboard from './components/HealthDashboard.vue'
 import RestReminderModal from './components/RestReminderModal.vue'
+import FullscreenRestReminder from './components/FullscreenRestReminder.vue'
 
 const activeTab = ref('overview')
 const totalTime = ref(0)
@@ -76,6 +85,8 @@ const focusAlertData = ref(null)
 const selectedDate = ref('')
 const showRestReminder = ref(false)
 const restReminderData = ref(null)
+const showFullscreenRestReminder = ref(false)
+const fullscreenRestData = ref(null)
 let refreshInterval = null
 
 async function loadAllData() {
@@ -148,8 +159,26 @@ function handleFocusAlert(data) {
 }
 
 function handleRestReminder(data) {
-  restReminderData.value = data
-  showRestReminder.value = true
+  if (data.type === 'scheduled') {
+    fullscreenRestData.value = data
+    showFullscreenRestReminder.value = true
+  } else {
+    restReminderData.value = data
+    showRestReminder.value = true
+  }
+}
+
+function handleFullscreenRestClose() {
+  showFullscreenRestReminder.value = false
+  fullscreenRestData.value = null
+}
+
+function handleFullscreenRestSkip() {
+  showFullscreenRestReminder.value = false
+  fullscreenRestData.value = null
+}
+
+function handleFullscreenRestStart() {
 }
 
 function handleRestDismiss() {
@@ -168,11 +197,28 @@ function handleRestAccept() {
   restReminderData.value = null
 }
 
+function handleRestBreakStart(data) {
+  if (!fullscreenRestData.value) {
+    fullscreenRestData.value = {
+      restDuration: data.restDuration || 5,
+      consecutiveMinutes: 45
+    }
+  }
+  showFullscreenRestReminder.value = true
+}
+
+function handleRestBreakEnd() {
+  showFullscreenRestReminder.value = false
+  fullscreenRestData.value = null
+}
+
 onMounted(() => {
   loadAllData()
   window.electronAPI.onUsageUpdated(handleUsageUpdate)
   window.electronAPI.onFocusAlert(handleFocusAlert)
   window.electronAPI.onRestReminder(handleRestReminder)
+  window.electronAPI.onRestBreakStart(handleRestBreakStart)
+  window.electronAPI.onRestBreakEnd(handleRestBreakEnd)
   refreshInterval = setInterval(loadAllData, 5000)
 })
 

@@ -74,6 +74,12 @@ function createTables() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_rest_reminders_date ON rest_reminders(date);
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
   `)
 }
 
@@ -1049,6 +1055,53 @@ function getWeeklyHealthReport() {
   }
 }
 
+function getSetting(key, defaultValue) {
+  if (!db) return defaultValue
+  const stmt = db.prepare('SELECT value FROM settings WHERE key = ?')
+  const row = stmt.get(key)
+  if (!row) return defaultValue
+  try {
+    return JSON.parse(row.value)
+  } catch {
+    return row.value
+  }
+}
+
+function setSetting(key, value) {
+  if (!db) return
+  const strValue = typeof value === 'string' ? value : JSON.stringify(value)
+  const stmt = db.prepare(`
+    INSERT INTO settings (key, value, updated_at)
+    VALUES (@key, @value, @updated_at)
+    ON CONFLICT(key) DO UPDATE SET value = @value, updated_at = @updated_at
+  `)
+  stmt.run({
+    key,
+    value: strValue,
+    updated_at: Date.now()
+  })
+}
+
+function getRestReminderSettings() {
+  return {
+    enabled: getSetting('rest_reminder_enabled', true),
+    workDuration: getSetting('rest_reminder_work_duration', 45),
+    restDuration: getSetting('rest_reminder_rest_duration', 5)
+  }
+}
+
+function saveRestReminderSettings(settings) {
+  if (settings.enabled !== undefined) {
+    setSetting('rest_reminder_enabled', settings.enabled)
+  }
+  if (settings.workDuration !== undefined) {
+    setSetting('rest_reminder_work_duration', settings.workDuration)
+  }
+  if (settings.restDuration !== undefined) {
+    setSetting('rest_reminder_rest_duration', settings.restDuration)
+  }
+}
+
 module.exports = {
   initDatabase,
   insertUsageLog,
@@ -1084,5 +1137,9 @@ module.exports = {
   getRestRemindersByDate,
   getHealthDashboardData,
   getHealthScatterData,
-  getWeeklyHealthReport
+  getWeeklyHealthReport,
+  getSetting,
+  setSetting,
+  getRestReminderSettings,
+  saveRestReminderSettings
 }

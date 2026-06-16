@@ -6,6 +6,7 @@ let currentWindow = null
 let currentWindowStart = null
 let lastAlertProcesses = new Set()
 let healthEngineRef = null
+let isPaused = false
 
 function setHealthEngine(engine) {
   healthEngineRef = engine
@@ -73,6 +74,15 @@ function checkFocusRules(processName) {
 
 async function tick() {
   const now = Date.now()
+
+  if (isPaused) {
+    if (currentWindow && currentWindowStart) {
+      currentWindow = null
+      currentWindowStart = null
+    }
+    return
+  }
+
   const activeWindow = await getActiveWindow()
 
   if (activeWindow) {
@@ -161,9 +171,32 @@ function getCurrentWindowInfo() {
   return currentWindow
 }
 
+function pauseTracker() {
+  if (isPaused) return
+  flushCurrentWindow()
+  isPaused = true
+  currentWindow = null
+  currentWindowStart = null
+  console.log('追踪器已暂停')
+}
+
+function resumeTracker() {
+  if (!isPaused) return
+  isPaused = false
+  tick()
+  console.log('追踪器已恢复')
+}
+
+function isTrackerPaused() {
+  return isPaused
+}
+
 module.exports = {
   startTracker,
   stopTracker,
   getCurrentWindow: getCurrentWindowInfo,
-  setHealthEngine
+  setHealthEngine,
+  pauseTracker,
+  resumeTracker,
+  isTrackerPaused
 }
