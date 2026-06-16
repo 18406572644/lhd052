@@ -185,26 +185,26 @@ onUnmounted(() => {
 
 <style scoped>
 .app-container {
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  min-height: 100vh;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px;
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
   background: transparent;
+  box-sizing: border-box;
 }
 
 .app-card {
   width: 100%;
-  height: 100%;
+  min-height: 100vh;
+  height: auto;
   background: var(--bg-primary);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-radius: 18px;
-  border: 1px solid var(--border-color);
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.4),
-    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -212,8 +212,8 @@ onUnmounted(() => {
 
 .tab-bar {
   display: flex;
-  padding: 0 10px;
-  gap: 4px;
+  padding: 0 16px;
+  gap: 6px;
   border-bottom: 1px solid var(--border-color);
   background: linear-gradient(180deg, rgba(102, 252, 184, 0.03) 0%, transparent 100%);
   flex-shrink: 0;
@@ -221,15 +221,16 @@ onUnmounted(() => {
 
 .tab-btn {
   flex: 1;
+  max-width: 160px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  padding: 8px 0;
+  gap: 6px;
+  padding: 10px 0;
   border: none;
   background: transparent;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   position: relative;
@@ -262,7 +263,7 @@ onUnmounted(() => {
 }
 
 .tab-icon {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1;
 }
 
@@ -271,29 +272,73 @@ onUnmounted(() => {
 }
 
 .app-content {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 12px 14px 14px;
+  padding: 20px 24px 28px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
+  max-width: 100%;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .health-content {
-  padding: 10px 10px 12px;
-  gap: 10px;
+  padding: 16px 18px 24px;
+  gap: 14px;
 }
 
 .chart-section {
-  min-height: 0;
+  min-height: 220px;
+  width: 100%;
 }
 
 .heatmap-section {
   flex-shrink: 0;
+  width: 100%;
 }
 
 .insights-section {
   flex-shrink: 0;
+  width: 100%;
+}
+
+@media (min-width: 600px) {
+  .app-content {
+    padding: 28px 40px 40px;
+  }
+  .health-content {
+    padding: 24px 32px 40px;
+  }
+  .tab-bar {
+    padding: 0 28px;
+  }
+}
+
+@media (min-width: 900px) {
+  .app-content {
+    padding: 32px 48px 48px;
+    max-width: 1100px;
+  }
+  .health-content {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  .health-content > * {
+    width: 100%;
+  }
+  .tab-bar {
+    padding: 0 44px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .app-content {
+    max-width: 1400px;
+  }
 }
 </style>

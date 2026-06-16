@@ -133,6 +133,7 @@ const chartOptions = computed(() => ({
   },
   scales: {
     x: {
+      type: 'linear',
       title: { display: true, text: xLabel.value, color: '#9aa7b8', font: { size: 9 } },
       grid: { color: 'rgba(255, 255, 255, 0.05)' },
       ticks: { color: '#9aa7b8', font: { size: 8 } },

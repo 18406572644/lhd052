@@ -659,7 +659,7 @@ function insertBodyMetric(metric) {
         sleep_quality = @sleep_quality,
         overall_feeling = @overall_feeling,
         notes = @notes
-      WHERE id = ?
+      WHERE id = @id
     `)
     stmt.run({
       vision_fatigue: metric.vision_fatigue || 0,
