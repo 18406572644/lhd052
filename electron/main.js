@@ -241,6 +241,36 @@ function updateTrayMenu() {
       }
     },
     {
+      label: '导出数据',
+      submenu: [
+        {
+          label: '导出 CSV...',
+          click: () => {
+            openExportDialog('csv')
+          }
+        },
+        {
+          label: '导出 JSON...',
+          click: () => {
+            openExportDialog('json')
+          }
+        },
+        {
+          label: '导出 PNG 报告...',
+          click: () => {
+            openExportDialog('png')
+          }
+        },
+        { type: 'separator' },
+        {
+          label: '打开导出对话框...',
+          click: () => {
+            openExportDialog()
+          }
+        }
+      ]
+    },
+    {
       label: '开机自启',
       type: 'checkbox',
       checked: app.getLoginItemSettings().openAtLogin,
@@ -262,6 +292,13 @@ function updateTrayMenu() {
   ])
 
   tray.setContextMenu(contextMenu)
+}
+
+function openExportDialog(format) {
+  switchToMainWindow()
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('open-export-dialog', format || null)
+  }
 }
 
 app.whenReady().then(() => {

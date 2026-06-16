@@ -1380,6 +1380,104 @@ function saveRestReminderSettings(settings) {
   }
 }
 
+function getUsageLogsByDateRange(startDate, endDate) {
+  if (!db) return []
+  const stmt = db.prepare(`
+    SELECT date, process_name, window_title, start_time, end_time, duration
+    FROM usage_logs
+    WHERE date >= ? AND date <= ?
+    ORDER BY date ASC, start_time ASC
+  `)
+  return stmt.all(startDate, endDate)
+}
+
+function getExportDataByDateRange(startDate, endDate) {
+  if (!db) return { dailyData: {}, categorySummary: [], totalDuration: 0, startDate, endDate }
+  
+  const logs = getUsageLogsByDateRange(startDate, endDate)
+  const dailyData = {}
+  const categorySummary = {}
+  let totalDuration = 0
+  
+  for (const log of logs) {
+    totalDuration += log.duration
+    
+    if (!dailyData[log.date]) {
+      dailyData[log.date] = {
+        date: log.date,
+        totalDuration: 0,
+        apps: {},
+        sessions: []
+      }
+    }
+    
+    dailyData[log.date].totalDuration += log.duration
+    dailyData[log.date].sessions.push({
+      process_name: log.process_name,
+      window_title: log.window_title,
+      start_time: log.start_time,
+      end_time: log.end_time,
+      duration: log.duration
+    })
+    
+    if (!dailyData[log.date].apps[log.process_name]) {
+      dailyData[log.date].apps[log.process_name] = {
+        process_name: log.process_name,
+        total_duration: 0,
+        sessions: []
+      }
+    }
+    dailyData[log.date].apps[log.process_name].total_duration += log.duration
+    dailyData[log.date].apps[log.process_name].sessions.push({
+      window_title: log.window_title,
+      start_time: log.start_time,
+      end_time: log.end_time,
+      duration: log.duration
+    })
+    
+    const category = getAppCategory(log.process_name)
+    if (!categorySummary[category]) {
+      categorySummary[category] = {
+        category,
+        total_duration: 0,
+        app_count: 0,
+        apps: {}
+      }
+    }
+    categorySummary[category].total_duration += log.duration
+    if (!categorySummary[category].apps[log.process_name]) {
+      categorySummary[category].apps[log.process_name] = 0
+      categorySummary[category].app_count++
+    }
+    categorySummary[category].apps[log.process_name] += log.duration
+  }
+  
+  const formattedDailyData = {}
+  for (const [date, data] of Object.entries(dailyData)) {
+    formattedDailyData[date] = {
+      ...data,
+      apps: Object.values(data.apps).sort((a, b) => b.total_duration - a.total_duration)
+    }
+  }
+  
+  const formattedCategorySummary = Object.values(categorySummary)
+    .map(cat => ({
+      ...cat,
+      apps: Object.entries(cat.apps)
+        .map(([name, duration]) => ({ process_name: name, total_duration: duration }))
+        .sort((a, b) => b.total_duration - a.total_duration)
+    }))
+    .sort((a, b) => b.total_duration - a.total_duration)
+  
+  return {
+    dailyData: formattedDailyData,
+    categorySummary: formattedCategorySummary,
+    totalDuration,
+    startDate,
+    endDate
+  }
+}
+
 module.exports = {
   initDatabase,
   insertUsageLog,
@@ -1429,5 +1527,7 @@ module.exports = {
   getCategoryUsageStats,
   getWeeklyDailyTotals,
   getWeeklyHeatmapMatrix,
-  getWeeklyMatrixHourApps
+  getWeeklyMatrixHourApps,
+  getUsageLogsByDateRange,
+  getExportDataByDateRange
 }

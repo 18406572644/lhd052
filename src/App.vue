@@ -21,6 +21,13 @@
         </button>
       </div>
       <div class="app-content" v-if="activeTab === 'overview'">
+        <div class="overview-header">
+          <span class="overview-title">概览</span>
+          <button class="export-btn" @click="openExportDialog" title="导出数据">
+            <span class="export-icon">📤</span>
+            <span class="export-text">导出</span>
+          </button>
+        </div>
         <TotalTimeCard :totalTime="totalTime" />
         <DailyInsights :insights="dailyInsights" class="insights-section" />
         <AppRankingChart
@@ -70,6 +77,11 @@
       @skip="handleFullscreenRestSkip"
       @start="handleFullscreenRestStart"
     />
+    <ExportDialog
+      :visible="showExportDialog"
+      :defaultFormat="exportDefaultFormat"
+      @close="showExportDialog = false"
+    />
   </div>
 </template>
 
@@ -86,6 +98,7 @@ import FocusAlertModal from './components/FocusAlertModal.vue'
 import HealthDashboard from './components/HealthDashboard.vue'
 import RestReminderModal from './components/RestReminderModal.vue'
 import FullscreenRestReminder from './components/FullscreenRestReminder.vue'
+import ExportDialog from './components/ExportDialog.vue'
 
 const activeTab = ref('overview')
 const totalTime = ref(0)
@@ -102,7 +115,10 @@ const restReminderData = ref(null)
 const showFullscreenRestReminder = ref(false)
 const fullscreenRestData = ref(null)
 const refreshTrigger = ref(0)
+const showExportDialog = ref(false)
+const exportDefaultFormat = ref(null)
 let refreshInterval = null
+let exportDialogHandler = null
 
 async function loadAllData() {
   try {
@@ -234,6 +250,18 @@ function handleRestBreakEnd() {
   fullscreenRestData.value = null
 }
 
+function openExportDialog(format) {
+  exportDefaultFormat.value = format || null
+  showExportDialog.value = true
+}
+
+function handleOpenExportDialog(format) {
+  if (activeTab.value !== 'overview') {
+    activeTab.value = 'overview'
+  }
+  openExportDialog(format)
+}
+
 onMounted(() => {
   loadAllData()
   window.electronAPI.onUsageUpdated(handleUsageUpdate)
@@ -241,6 +269,7 @@ onMounted(() => {
   window.electronAPI.onRestReminder(handleRestReminder)
   window.electronAPI.onRestBreakStart(handleRestBreakStart)
   window.electronAPI.onRestBreakEnd(handleRestBreakEnd)
+  exportDialogHandler = window.electronAPI.onOpenExportDialog(handleOpenExportDialog)
   refreshInterval = setInterval(loadAllData, 5000)
 })
 
@@ -261,6 +290,49 @@ onUnmounted(() => {
   padding: 0;
   background: transparent;
   box-sizing: border-box;
+}
+
+.overview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.overview-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.export-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(102, 252, 184, 0.1);
+  border: 1px solid rgba(102, 252, 184, 0.3);
+  border-radius: 8px;
+  color: var(--accent-color);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.export-btn:hover {
+  background: rgba(102, 252, 184, 0.2);
+  border-color: var(--accent-color);
+  transform: translateY(-1px);
+}
+
+.export-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.export-text {
+  line-height: 1;
 }
 
 .app-card {

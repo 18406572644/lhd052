@@ -54,5 +54,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setSetting: (key, value) => ipcRenderer.invoke('set-setting', key, value),
   getWeeklyDailyTotals: () => ipcRenderer.invoke('get-weekly-daily-totals'),
   getWeeklyHeatmapMatrix: () => ipcRenderer.invoke('get-weekly-heatmap-matrix'),
-  getWeeklyMatrixHourApps: (weekday, hour) => ipcRenderer.invoke('get-weekly-matrix-hour-apps', weekday, hour)
+  getWeeklyMatrixHourApps: (weekday, hour) => ipcRenderer.invoke('get-weekly-matrix-hour-apps', weekday, hour),
+  getExportData: (startDate, endDate) => ipcRenderer.invoke('get-export-data', startDate, endDate),
+  getUsageLogs: (startDate, endDate) => ipcRenderer.invoke('get-usage-logs', startDate, endDate),
+  showSaveDialog: (options) => ipcRenderer.invoke('show-save-dialog', options),
+  saveFile: (filePath, content, encoding) => ipcRenderer.invoke('save-file', filePath, content, encoding),
+  onOpenExportDialog: (callback) => {
+    ipcRenderer.on('open-export-dialog', (_event, format) => callback(format))
+  }
 })

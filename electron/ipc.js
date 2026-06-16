@@ -1,4 +1,5 @@
-const { ipcMain, BrowserWindow } = require('electron')
+const { ipcMain, BrowserWindow, dialog } = require('electron')
+const fs = require('fs')
 const {
   getTodayAppUsage,
   getTodayTotalTime,
@@ -32,7 +33,9 @@ const {
   setSetting,
   getWeeklyDailyTotals,
   getWeeklyHeatmapMatrix,
-  getWeeklyMatrixHourApps
+  getWeeklyMatrixHourApps,
+  getUsageLogsByDateRange,
+  getExportDataByDateRange
 } = require('./database')
 
 let miniWindowRef = null
@@ -260,6 +263,46 @@ function registerIpcHandlers() {
 
   ipcMain.handle('get-weekly-matrix-hour-apps', (_event, weekday, hour) => {
     return getWeeklyMatrixHourApps(weekday, hour)
+  })
+
+  ipcMain.handle('get-export-data', (_event, startDate, endDate) => {
+    return getExportDataByDateRange(startDate, endDate)
+  })
+
+  ipcMain.handle('get-usage-logs', (_event, startDate, endDate) => {
+    return getUsageLogsByDateRange(startDate, endDate)
+  })
+
+  ipcMain.handle('show-save-dialog', (_event, options) => {
+    const focusedWindow = BrowserWindow.getFocusedWindow()
+    return dialog.showSaveDialog(focusedWindow, options)
+  })
+
+  ipcMain.handle('save-file', (_event, filePath, content, encoding = 'utf-8') => {
+    try {
+      if (encoding === 'base64') {
+        const buffer = Buffer.from(content, 'base64')
+        fs.writeFileSync(filePath, buffer)
+      } else if (encoding === 'binary') {
+        fs.writeFileSync(filePath, content, 'binary')
+      } else {
+        fs.writeFileSync(filePath, content, encoding)
+      }
+      return { success: true, filePath }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('open-export-dialog', () => {
+    if (mainModule && typeof mainModule.switchToMainWindow === 'function') {
+      mainModule.switchToMainWindow()
+    }
+    const windows = BrowserWindow.getAllWindows()
+    windows.forEach(win => {
+      win.webContents.send('open-export-dialog')
+    })
+    return true
   })
 }
 
