@@ -15,5 +15,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onFocusAlert: (callback) => {
     ipcRenderer.on('focus-alert', (_event, data) => callback(data))
-  }
+  },
+  getDateRangeHeatmap: (range) => ipcRenderer.invoke('get-date-range-heatmap', range),
+  getHourlyAppUsage: (date, hour) => ipcRenderer.invoke('get-hourly-app-usage', date, hour),
+  getDailyHeatmapByDate: (date) => ipcRenderer.invoke('get-daily-heatmap-by-date', date),
+  getDateAppUsage: (date) => ipcRenderer.invoke('get-date-app-usage', date)
 })

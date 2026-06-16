@@ -375,6 +375,200 @@ function getDailyInsights() {
   return insights
 }
 
+function getDailyHeatmapByDate(dateStr) {
+  if (!db) return []
+  const stmt = db.prepare(`
+    SELECT hour, COALESCE(SUM(duration), 0) as total_duration
+    FROM usage_logs
+    WHERE date = ?
+    GROUP BY hour
+    ORDER BY hour
+  `)
+  const results = stmt.all(dateStr)
+  const heatmap = new Array(24).fill(0)
+  results.forEach(row => {
+    heatmap[row.hour] = row.total_duration
+  })
+  return heatmap
+}
+
+function getWeeklyHeatmap() {
+  if (!db) return { dates: [], days: [], data: [] }
+  const now = new Date()
+  const dayOfWeek = now.getDay() || 7
+  const monday = new Date(now)
+  monday.setDate(now.getDate() - dayOfWeek + 1)
+  const dates = []
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday)
+    d.setDate(monday.getDate() + i)
+    dates.push(d.toISOString().split('T')[0])
+  }
+  const placeholders = dates.map(() => '?').join(',')
+  const stmt = db.prepare(`
+    SELECT date, hour, COALESCE(SUM(duration), 0) as total_duration
+    FROM usage_logs
+    WHERE date IN (${placeholders})
+    GROUP BY date, hour
+    ORDER BY date, hour
+  `)
+  const results = stmt.all(...dates)
+  const data = dates.map(() => new Array(24).fill(0))
+  results.forEach(row => {
+    const dayIndex = dates.indexOf(row.date)
+    if (dayIndex !== -1) {
+      data[dayIndex][row.hour] = row.total_duration
+    }
+  })
+  return { dates, days: dates, data }
+}
+
+function getMonthlyHeatmap() {
+  if (!db) return { weeks: [], data: [], dates: [] }
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth()
+  const firstDay = new Date(year, month, 1)
+  const lastDay = new Date(year, month + 1, 0)
+  const startDayOfWeek = firstDay.getDay() || 7
+  const startDate = new Date(firstDay)
+  startDate.setDate(firstDay.getDate() - startDayOfWeek + 1)
+  const dates = []
+  const current = new Date(startDate)
+  while (current <= lastDay || dates.length % 7 !== 0) {
+    dates.push({
+      date: current.toISOString().split('T')[0],
+      inMonth: current.getMonth() === month,
+      day: current.getDate()
+    })
+    current.setDate(current.getDate() + 1)
+  }
+  while (dates.length % 7 !== 0) {
+    dates.push({
+      date: current.toISOString().split('T')[0],
+      inMonth: false,
+      day: current.getDate()
+    })
+    current.setDate(current.getDate() + 1)
+  }
+  const dateStrings = dates.map(d => d.date)
+  const placeholders = dateStrings.map(() => '?').join(',')
+  const stmt = db.prepare(`
+    SELECT date, COALESCE(SUM(duration), 0) as total_duration
+    FROM usage_logs
+    WHERE date IN (${placeholders})
+    GROUP BY date
+  `)
+  const results = stmt.all(...dateStrings)
+  const durationMap = {}
+  results.forEach(row => {
+    durationMap[row.date] = row.total_duration
+  })
+  const data = dates.map(d => ({
+    ...d,
+    duration: durationMap[d.date] || 0
+  }))
+  const weeks = []
+  for (let i = 0; i < data.length; i += 7) {
+    weeks.push(data.slice(i, i + 7))
+  }
+  return { weeks, data, dates: dateStrings }
+}
+
+function getLast30DaysHeatmap() {
+  if (!db) return { weeks: [], data: [], dates: [] }
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  const dates = []
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(now)
+    d.setDate(now.getDate() - i)
+    dates.push({
+      date: d.toISOString().split('T')[0],
+      inMonth: true,
+      day: d.getDate()
+    })
+  }
+  const dateStrings = dates.map(d => d.date)
+  const placeholders = dateStrings.map(() => '?').join(',')
+  const stmt = db.prepare(`
+    SELECT date, COALESCE(SUM(duration), 0) as total_duration
+    FROM usage_logs
+    WHERE date IN (${placeholders})
+    GROUP BY date
+  `)
+  const results = stmt.all(...dateStrings)
+  const durationMap = {}
+  results.forEach(row => {
+    durationMap[row.date] = row.total_duration
+  })
+  const data = dates.map(d => ({
+    ...d,
+    duration: durationMap[d.date] || 0
+  }))
+  const weeks = []
+  for (let i = 0; i < data.length; i += 7) {
+    weeks.push(data.slice(i, Math.min(i + 7, data.length)))
+  }
+  return { weeks, data, dates: dateStrings }
+}
+
+function getHourlyAppUsage(dateStr, hour) {
+  if (!db) return []
+  const stmt = db.prepare(`
+    SELECT process_name, COALESCE(SUM(duration), 0) as total_duration
+    FROM usage_logs
+    WHERE date = ? AND hour = ?
+    GROUP BY process_name
+    ORDER BY total_duration DESC
+    LIMIT 3
+  `)
+  return stmt.all(dateStr, hour)
+}
+
+function getDateAppUsage(dateStr) {
+  if (!db) return []
+  const stmt = db.prepare(`
+    SELECT process_name, SUM(duration) as total_duration
+    FROM usage_logs
+    WHERE date = ?
+    GROUP BY process_name
+    ORDER BY total_duration DESC
+    LIMIT 10
+  `)
+  return stmt.all(dateStr)
+}
+
+function getDateRangeHeatmap(range) {
+  switch (range) {
+    case 'today':
+      return {
+        type: 'day',
+        data: getHourlyHeatmap()
+      }
+    case 'week':
+      return {
+        type: 'week',
+        ...getWeeklyHeatmap()
+      }
+    case 'month':
+      return {
+        type: 'month',
+        ...getMonthlyHeatmap()
+      }
+    case 'last30':
+      return {
+        type: 'month',
+        ...getLast30DaysHeatmap()
+      }
+    default:
+      return {
+        type: 'day',
+        data: getHourlyHeatmap()
+      }
+  }
+}
+
 module.exports = {
   initDatabase,
   insertUsageLog,
@@ -389,5 +583,12 @@ module.exports = {
   getSocialUsageComparison,
   getFocusRuleEffectiveness,
   getProductiveHours,
-  getDailyInsights
+  getDailyInsights,
+  getDailyHeatmapByDate,
+  getWeeklyHeatmap,
+  getMonthlyHeatmap,
+  getLast30DaysHeatmap,
+  getHourlyAppUsage,
+  getDateRangeHeatmap,
+  getDateAppUsage
 }

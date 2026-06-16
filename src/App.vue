@@ -6,7 +6,11 @@
         <TotalTimeCard :totalTime="totalTime" />
         <DailyInsights :insights="dailyInsights" class="insights-section" />
         <AppRankingChart :appUsage="appUsage" class="chart-section" />
-        <HourlyHeatmap :heatmapData="heatmapData" class="heatmap-section" />
+        <HourlyHeatmap
+          :selectedDate="selectedDate"
+          @select-date="handleSelectDate"
+          class="heatmap-section"
+        />
         <FocusModePanel
           :rules="focusRules"
           @save="handleSaveRule"
@@ -39,18 +43,49 @@ const focusRules = ref([])
 const dailyInsights = ref([])
 const showFocusAlert = ref(false)
 const focusAlertData = ref(null)
+const selectedDate = ref('')
 let refreshInterval = null
 
 async function loadAllData() {
   try {
-    totalTime.value = await window.electronAPI.getTodayTotalTime()
-    appUsage.value = await window.electronAPI.getTodayAppUsage()
-    heatmapData.value = await window.electronAPI.getHourlyHeatmap()
+    if (selectedDate.value) {
+      totalTime.value = await getDateTotalTime(selectedDate.value)
+      appUsage.value = await getDateAppUsage(selectedDate.value)
+      heatmapData.value = await window.electronAPI.getDailyHeatmapByDate(selectedDate.value)
+    } else {
+      totalTime.value = await window.electronAPI.getTodayTotalTime()
+      appUsage.value = await window.electronAPI.getTodayAppUsage()
+      heatmapData.value = await window.electronAPI.getHourlyHeatmap()
+    }
     focusRules.value = await window.electronAPI.getFocusRules()
     dailyInsights.value = await window.electronAPI.getDailyInsights()
   } catch (e) {
     console.error('加载数据失败:', e)
   }
+}
+
+async function getDateTotalTime(date) {
+  try {
+    const data = await window.electronAPI.getDailyHeatmapByDate(date)
+    return data.reduce((sum, v) => sum + v, 0)
+  } catch (e) {
+    console.error('获取日期总时长失败:', e)
+    return 0
+  }
+}
+
+async function getDateAppUsage(date) {
+  try {
+    return await window.electronAPI.getDateAppUsage(date)
+  } catch (e) {
+    console.error('获取日期应用使用失败:', e)
+    return []
+  }
+}
+
+function handleSelectDate(date) {
+  selectedDate.value = date
+  loadAllData()
 }
 
 async function handleSaveRule(rule) {

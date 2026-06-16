@@ -6,7 +6,11 @@ const {
   getFocusRules,
   saveFocusRule,
   deleteFocusRule,
-  getDailyInsights
+  getDailyInsights,
+  getDateRangeHeatmap,
+  getHourlyAppUsage,
+  getDailyHeatmapByDate,
+  getDateAppUsage
 } = require('./database')
 
 let miniWindowRef = null
@@ -39,6 +43,22 @@ function registerIpcHandlers() {
 
   ipcMain.handle('get-daily-insights', () => {
     return getDailyInsights()
+  })
+
+  ipcMain.handle('get-date-range-heatmap', (_event, range) => {
+    return getDateRangeHeatmap(range)
+  })
+
+  ipcMain.handle('get-hourly-app-usage', (_event, date, hour) => {
+    return getHourlyAppUsage(date, hour)
+  })
+
+  ipcMain.handle('get-daily-heatmap-by-date', (_event, date) => {
+    return getDailyHeatmapByDate(date)
+  })
+
+  ipcMain.handle('get-date-app-usage', (_event, date) => {
+    return getDateAppUsage(date)
   })
 
   ipcMain.handle('save-focus-rule', (_event, rule) => {
