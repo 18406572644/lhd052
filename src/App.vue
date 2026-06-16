@@ -4,6 +4,7 @@
       <TitleBar @minimize="handleMinimize" @close="handleClose" />
       <div class="app-content">
         <TotalTimeCard :totalTime="totalTime" />
+        <DailyInsights :insights="dailyInsights" class="insights-section" />
         <AppRankingChart :appUsage="appUsage" class="chart-section" />
         <HourlyHeatmap :heatmapData="heatmapData" class="heatmap-section" />
         <FocusModePanel
@@ -25,6 +26,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import TitleBar from './components/TitleBar.vue'
 import TotalTimeCard from './components/TotalTimeCard.vue'
+import DailyInsights from './components/DailyInsights.vue'
 import AppRankingChart from './components/AppRankingChart.vue'
 import HourlyHeatmap from './components/HourlyHeatmap.vue'
 import FocusModePanel from './components/FocusModePanel.vue'
@@ -34,6 +36,7 @@ const totalTime = ref(0)
 const appUsage = ref([])
 const heatmapData = ref(new Array(24).fill(0))
 const focusRules = ref([])
+const dailyInsights = ref([])
 const showFocusAlert = ref(false)
 const focusAlertData = ref(null)
 let refreshInterval = null
@@ -44,6 +47,7 @@ async function loadAllData() {
     appUsage.value = await window.electronAPI.getTodayAppUsage()
     heatmapData.value = await window.electronAPI.getHourlyHeatmap()
     focusRules.value = await window.electronAPI.getFocusRules()
+    dailyInsights.value = await window.electronAPI.getDailyInsights()
   } catch (e) {
     console.error('加载数据失败:', e)
   }
@@ -132,6 +136,10 @@ onUnmounted(() => {
 }
 
 .heatmap-section {
+  flex-shrink: 0;
+}
+
+.insights-section {
   flex-shrink: 0;
 }
 </style>

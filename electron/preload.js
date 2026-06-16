@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getTodayTotalTime: () => ipcRenderer.invoke('get-today-total-time'),
   getHourlyHeatmap: () => ipcRenderer.invoke('get-hourly-heatmap'),
   getFocusRules: () => ipcRenderer.invoke('get-focus-rules'),
+  getDailyInsights: () => ipcRenderer.invoke('get-daily-insights'),
   saveFocusRule: (rule) => ipcRenderer.invoke('save-focus-rule', rule),
   deleteFocusRule: (id) => ipcRenderer.invoke('delete-focus-rule', id),
   minimizeWindow: () => ipcRenderer.send('window-minimize'),

@@ -5,7 +5,8 @@ const {
   getHourlyHeatmap,
   getFocusRules,
   saveFocusRule,
-  deleteFocusRule
+  deleteFocusRule,
+  getDailyInsights
 } = require('./database')
 
 let miniWindowRef = null
@@ -34,6 +35,10 @@ function registerIpcHandlers() {
 
   ipcMain.handle('get-focus-rules', () => {
     return getFocusRules()
+  })
+
+  ipcMain.handle('get-daily-insights', () => {
+    return getDailyInsights()
   })
 
   ipcMain.handle('save-focus-rule', (_event, rule) => {
