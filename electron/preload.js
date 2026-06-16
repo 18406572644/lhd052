@@ -51,5 +51,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppUsageByDate: (date) => ipcRenderer.invoke('get-app-usage-by-date', date),
   getAppDetailByDate: (processName, date) => ipcRenderer.invoke('get-app-detail-by-date', processName, date),
   getSetting: (key, defaultValue) => ipcRenderer.invoke('get-setting', key, defaultValue),
-  setSetting: (key, value) => ipcRenderer.invoke('set-setting', key, value)
+  setSetting: (key, value) => ipcRenderer.invoke('set-setting', key, value),
+  getWeeklyDailyTotals: () => ipcRenderer.invoke('get-weekly-daily-totals'),
+  getWeeklyHeatmapMatrix: () => ipcRenderer.invoke('get-weekly-heatmap-matrix'),
+  getWeeklyMatrixHourApps: (weekday, hour) => ipcRenderer.invoke('get-weekly-matrix-hour-apps', weekday, hour)
 })

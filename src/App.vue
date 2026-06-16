@@ -30,11 +30,17 @@
           @update-category="handleCategoryUpdate"
           class="chart-section"
         />
-        <HourlyHeatmap
-          :selectedDate="selectedDate"
-          @select-date="handleSelectDate"
-          class="heatmap-section"
-        />
+        <div class="trend-analysis-section">
+          <HourlyHeatmap
+            :selectedDate="selectedDate"
+            @select-date="handleSelectDate"
+            class="heatmap-section"
+          />
+          <WeeklyTrendChart
+            :refreshTrigger="refreshTrigger"
+            class="trend-chart-section"
+          />
+        </div>
         <FocusModePanel
           :rules="focusRules"
           @save="handleSaveRule"
@@ -74,6 +80,7 @@ import TotalTimeCard from './components/TotalTimeCard.vue'
 import DailyInsights from './components/DailyInsights.vue'
 import AppRankingChart from './components/AppRankingChart.vue'
 import HourlyHeatmap from './components/HourlyHeatmap.vue'
+import WeeklyTrendChart from './components/WeeklyTrendChart.vue'
 import FocusModePanel from './components/FocusModePanel.vue'
 import FocusAlertModal from './components/FocusAlertModal.vue'
 import HealthDashboard from './components/HealthDashboard.vue'
@@ -94,6 +101,7 @@ const showRestReminder = ref(false)
 const restReminderData = ref(null)
 const showFullscreenRestReminder = ref(false)
 const fullscreenRestData = ref(null)
+const refreshTrigger = ref(0)
 let refreshInterval = null
 
 async function loadAllData() {
@@ -111,6 +119,7 @@ async function loadAllData() {
     }
     focusRules.value = await window.electronAPI.getFocusRules()
     dailyInsights.value = await window.electronAPI.getDailyInsights()
+    refreshTrigger.value++
   } catch (e) {
     console.error('加载数据失败:', e)
   }
@@ -355,8 +364,19 @@ onUnmounted(() => {
   width: 100%;
 }
 
-.heatmap-section {
+.trend-analysis-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
   flex-shrink: 0;
+}
+
+.heatmap-section {
+  width: 100%;
+}
+
+.trend-chart-section {
   width: 100%;
 }
 

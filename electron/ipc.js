@@ -29,7 +29,10 @@ const {
   getDefaultCategoriesList,
   getCategoryUsageStats,
   getSetting,
-  setSetting
+  setSetting,
+  getWeeklyDailyTotals,
+  getWeeklyHeatmapMatrix,
+  getWeeklyMatrixHourApps
 } = require('./database')
 
 let miniWindowRef = null
@@ -245,6 +248,18 @@ function registerIpcHandlers() {
   ipcMain.handle('set-setting', (_event, key, value) => {
     setSetting(key, value)
     return true
+  })
+
+  ipcMain.handle('get-weekly-daily-totals', () => {
+    return getWeeklyDailyTotals()
+  })
+
+  ipcMain.handle('get-weekly-heatmap-matrix', () => {
+    return getWeeklyHeatmapMatrix()
+  })
+
+  ipcMain.handle('get-weekly-matrix-hour-apps', (_event, weekday, hour) => {
+    return getWeeklyMatrixHourApps(weekday, hour)
   })
 }
 

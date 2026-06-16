@@ -6,87 +6,138 @@
         <span v-if="currentRange === 'today' && selectedDate" class="date-indicator">
           {{ formatDateDisplay(selectedDate) }}
         </span>
+        <span v-else-if="matrixTab === 'matrix'" class="section-total">{{ formatDurationShort(matrixTotal) }}</span>
         <span v-else class="section-total">{{ formatDurationShort(totalTime) }}</span>
       </div>
     </div>
 
-    <div class="range-selector">
+    <div class="tab-switcher">
       <button
-        v-for="range in rangeOptions"
-        :key="range.value"
-        class="range-btn"
-        :class="{ active: currentRange === range.value }"
-        @click="handleRangeChange(range.value)"
+        class="tab-btn"
+        :class="{ active: matrixTab === 'period' }"
+        @click="matrixTab = 'period'"
       >
-        {{ range.label }}
+        时段热力
+      </button>
+      <button
+        class="tab-btn"
+        :class="{ active: matrixTab === 'matrix' }"
+        @click="switchToMatrix"
+      >
+        周模式矩阵
       </button>
     </div>
 
-    <div v-if="currentView === 'day'" class="heatmap-grid-wrapper">
-      <div class="hour-labels">
-        <span v-for="h in labelHours" :key="h" class="hour-label">{{ h }}</span>
+    <div v-if="matrixTab === 'period'">
+      <div class="range-selector">
+        <button
+          v-for="range in rangeOptions"
+          :key="range.value"
+          class="range-btn"
+          :class="{ active: currentRange === range.value }"
+          @click="handleRangeChange(range.value)"
+        >
+          {{ range.label }}
+        </button>
       </div>
-      <div class="heatmap-grid day-grid">
-        <div
-          v-for="(value, hour) in dayData"
-          :key="hour"
-          class="heatmap-cell"
-          :class="'level-' + getDayLevel(value)"
-          :title="getDayCellTitle(hour, value)"
-          @click="handleDayCellClick(hour)"
-        ></div>
-      </div>
-    </div>
 
-    <div v-else-if="currentView === 'week'" class="heatmap-week-wrapper">
-      <div class="week-corner"></div>
-      <div class="week-hour-labels">
-        <span v-for="h in labelHours" :key="h" class="week-hour-label">{{ h }}</span>
-      </div>
-      <div class="week-body">
-        <div class="week-day-labels">
-          <span v-for="(day, idx) in weekDays" :key="idx" class="week-day-label">{{ day }}</span>
+      <div v-if="currentView === 'day'" class="heatmap-grid-wrapper">
+        <div class="hour-labels">
+          <span v-for="h in labelHours" :key="h" class="hour-label">{{ h }}</span>
         </div>
-        <div class="heatmap-week-grid">
+        <div class="heatmap-grid day-grid">
           <div
-            v-for="(dayData, dayIdx) in weekData"
-            :key="dayIdx"
-            class="week-row"
+            v-for="(value, hour) in dayData"
+            :key="hour"
+            class="heatmap-cell"
+            :class="'level-' + getDayLevel(value)"
+            :title="getDayCellTitle(hour, value)"
+            @click="handleDayCellClick(hour)"
+          ></div>
+        </div>
+      </div>
+
+      <div v-else-if="currentView === 'week'" class="heatmap-week-wrapper">
+        <div class="week-corner"></div>
+        <div class="week-hour-labels">
+          <span v-for="h in labelHours" :key="h" class="week-hour-label">{{ h }}</span>
+        </div>
+        <div class="week-body">
+          <div class="week-day-labels">
+            <span v-for="(day, idx) in weekDays" :key="idx" class="week-day-label">{{ day }}</span>
+          </div>
+          <div class="heatmap-week-grid">
+            <div
+              v-for="(dayData, dayIdx) in weekData"
+              :key="dayIdx"
+              class="week-row"
+            >
+              <div
+                v-for="(value, hour) in dayData"
+                :key="hour"
+                class="heatmap-cell"
+                :class="'level-' + getWeekLevel(value)"
+                :title="getWeekCellTitle(dayIdx, hour, value)"
+                @click="handleWeekCellClick(dayIdx, hour)"
+              ></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="currentView === 'month'" class="heatmap-month-wrapper">
+        <div class="month-weekday-labels">
+          <span v-for="d in monthWeekdays" :key="d" class="month-weekday-label">{{ d }}</span>
+        </div>
+        <div class="heatmap-month-grid">
+          <div
+            v-for="(week, weekIdx) in monthWeeks"
+            :key="weekIdx"
+            class="month-week-row"
           >
             <div
-              v-for="(value, hour) in dayData"
-              :key="hour"
-              class="heatmap-cell"
-              :class="'level-' + getWeekLevel(value)"
-              :title="getWeekCellTitle(dayIdx, hour, value)"
-              @click="handleWeekCellClick(dayIdx, hour)"
+              v-for="(day, dayIdx) in week"
+              :key="day.date"
+              class="heatmap-cell month-cell"
+              :class="[
+                'level-' + getMonthLevel(day.duration),
+                { 'out-of-month': !day.inMonth, 'is-today': isToday(day.date) }
+              ]"
+              :title="getMonthCellTitle(day)"
+              @click="handleMonthCellClick(day)"
             ></div>
           </div>
         </div>
       </div>
     </div>
 
-    <div v-else-if="currentView === 'month'" class="heatmap-month-wrapper">
-      <div class="month-weekday-labels">
-        <span v-for="d in monthWeekdays" :key="d" class="month-weekday-label">{{ d }}</span>
-      </div>
-      <div class="heatmap-month-grid">
-        <div
-          v-for="(week, weekIdx) in monthWeeks"
-          :key="weekIdx"
-          class="month-week-row"
-        >
-          <div
-            v-for="(day, dayIdx) in week"
-            :key="day.date"
-            class="heatmap-cell month-cell"
-            :class="[
-              'level-' + getMonthLevel(day.duration),
-              { 'out-of-month': !day.inMonth, 'is-today': isToday(day.date) }
-            ]"
-            :title="getMonthCellTitle(day)"
-            @click="handleMonthCellClick(day)"
-          ></div>
+    <div v-else-if="matrixTab === 'matrix'" class="matrix-wrapper">
+      <div class="matrix-subtitle">一周各时段使用分布（历史累计）</div>
+      <div class="heatmap-week-wrapper">
+        <div class="week-corner"></div>
+        <div class="week-hour-labels">
+          <span v-for="h in labelHours" :key="h" class="week-hour-label">{{ h }}</span>
+        </div>
+        <div class="week-body">
+          <div class="week-day-labels">
+            <span v-for="(day, idx) in weekDays" :key="idx" class="week-day-label">{{ day }}</span>
+          </div>
+          <div class="heatmap-week-grid">
+            <div
+              v-for="(dayData, dayIdx) in matrixData"
+              :key="dayIdx"
+              class="week-row"
+            >
+              <div
+                v-for="(value, hour) in dayData"
+                :key="hour"
+                class="heatmap-cell"
+                :class="'level-' + getMatrixLevel(value)"
+                :title="getMatrixCellTitle(dayIdx, hour, value)"
+                @click="handleMatrixCellClick(dayIdx, hour)"
+              ></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -162,6 +213,9 @@ const monthData = ref({ weeks: [], data: [] })
 const showPieModal = ref(false)
 const pieData = ref([])
 const pieModalTitle = ref('')
+const matrixTab = ref('period')
+const matrixData = ref(Array.from({ length: 7 }, () => new Array(24).fill(0)))
+const matrixLoaded = ref(false)
 
 const rangeOptions = [
   { value: 'today', label: '今日', view: 'day' },
@@ -177,6 +231,9 @@ const monthWeekdays = ['一', '二', '三', '四', '五', '六', '日']
 const pieColors = ['#66fcb8', '#4de0a0', '#36b37e']
 
 const titleText = computed(() => {
+  if (matrixTab.value === 'matrix') {
+    return '活跃度 · 周模式'
+  }
   const range = rangeOptions.find(r => r.value === currentRange.value)
   if (currentRange.value === 'today' && props.selectedDate) {
     return '单日详情'
@@ -197,6 +254,18 @@ const totalTime = computed(() => {
     return (monthData.value.data || []).reduce((sum, d) => sum + (d.duration || 0), 0)
   }
   return 0
+})
+
+const matrixTotal = computed(() => {
+  return matrixData.value.reduce((sum, day) => sum + day.reduce((s, v) => s + v, 0), 0)
+})
+
+const maxMatrixValue = computed(() => {
+  let max = 0
+  matrixData.value.forEach(day => {
+    day.forEach(v => { if (v > max) max = v })
+  })
+  return max > 0 ? max : 1
 })
 
 const pieTotal = computed(() => {
@@ -280,6 +349,15 @@ function getMonthLevel(value) {
   return 4
 }
 
+function getMatrixLevel(value) {
+  if (value <= 0) return 0
+  const ratio = value / maxMatrixValue.value
+  if (ratio < 0.25) return 1
+  if (ratio < 0.5) return 2
+  if (ratio < 0.75) return 3
+  return 4
+}
+
 function getDayCellTitle(hour, value) {
   const timeStr = `${hour.toString().padStart(2, '0')}:00`
   const durationStr = formatDurationShort(value)
@@ -297,6 +375,13 @@ function getWeekCellTitle(dayIdx, hour, value) {
 function getMonthCellTitle(day) {
   const durationStr = formatDurationShort(day.duration)
   return `${day.date} - 总计 ${durationStr}`
+}
+
+function getMatrixCellTitle(dayIdx, hour, value) {
+  const weekDay = weekDays[dayIdx]
+  const timeStr = `${hour.toString().padStart(2, '0')}:00`
+  const durationStr = formatDurationShort(value)
+  return `${weekDay} ${timeStr} - 累计 ${durationStr}`
 }
 
 function getDisplayName(processName) {
@@ -368,6 +453,40 @@ async function handleDayCellClick(hour) {
 async function handleWeekCellClick(dayIdx, hour) {
   const date = weekDaysData.value.dates ? weekDaysData.value.dates[dayIdx] : weekDaysData.value.days[dayIdx]
   await openPieModal(date, hour)
+}
+
+async function handleMatrixCellClick(dayIdx, hour) {
+  await openMatrixPieModal(dayIdx, hour)
+}
+
+async function openMatrixPieModal(dayIdx, hour) {
+  try {
+    const data = await window.electronAPI.getWeeklyMatrixHourApps(dayIdx, hour)
+    pieData.value = data
+    pieModalTitle.value = `${weekDays[dayIdx]} ${hour.toString().padStart(2, '0')}:00 - ${(hour + 1).toString().padStart(2, '0')}:00 · 历史累计 Top 3`
+    showPieModal.value = true
+  } catch (e) {
+    console.error('加载矩阵时段应用数据失败:', e)
+  }
+}
+
+async function loadMatrixData() {
+  try {
+    const data = await window.electronAPI.getWeeklyHeatmapMatrix()
+    if (data && data.data) {
+      matrixData.value = data.data
+    }
+    matrixLoaded.value = true
+  } catch (e) {
+    console.error('加载周模式矩阵数据失败:', e)
+  }
+}
+
+function switchToMatrix() {
+  matrixTab.value = 'matrix'
+  if (!matrixLoaded.value) {
+    loadMatrixData()
+  }
 }
 
 async function openPieModal(date, hour) {
@@ -465,6 +584,38 @@ onMounted(async () => {
   background: var(--bg-tertiary);
   padding: 2px 6px;
   border-radius: 8px;
+}
+
+.tab-switcher {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 3px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+}
+
+.tab-switcher .tab-btn {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab-switcher .tab-btn:hover {
+  color: var(--text-secondary);
+}
+
+.tab-switcher .tab-btn.active {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .range-selector {
@@ -829,5 +980,16 @@ onMounted(async () => {
   min-width: 30px;
   text-align: right;
   flex-shrink: 0;
+}
+
+.matrix-wrapper {
+  margin-bottom: 8px;
+}
+
+.matrix-subtitle {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  text-align: center;
 }
 </style>

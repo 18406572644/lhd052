@@ -824,6 +824,69 @@ function getDateRangeHeatmap(range) {
   }
 }
 
+function getWeeklyDailyTotals() {
+  if (!db) return { dates: [], totals: [] }
+  const dates = []
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now)
+    d.setDate(now.getDate() - i)
+    dates.push(d.toISOString().split('T')[0])
+  }
+  const placeholders = dates.map(() => '?').join(',')
+  const stmt = db.prepare(`
+    SELECT date, COALESCE(SUM(duration), 0) as total_duration
+    FROM usage_logs
+    WHERE date IN (${placeholders})
+    GROUP BY date
+    ORDER BY date ASC
+  `)
+  const results = stmt.all(...dates)
+  const totalMap = {}
+  results.forEach(row => {
+    totalMap[row.date] = row.total_duration
+  })
+  const totals = dates.map(date => totalMap[date] || 0)
+  return { dates, totals }
+}
+
+function getWeeklyHeatmapMatrix() {
+  if (!db) return { data: [] }
+  const stmt = db.prepare(`
+    SELECT 
+      CAST(strftime('%w', date) AS INTEGER) as weekday,
+      hour,
+      COALESCE(SUM(duration), 0) as total_duration
+    FROM usage_logs
+    GROUP BY weekday, hour
+    ORDER BY weekday, hour
+  `)
+  const results = stmt.all()
+  const data = Array.from({ length: 7 }, () => new Array(24).fill(0))
+  results.forEach(row => {
+    const dayIdx = row.weekday === 0 ? 6 : row.weekday - 1
+    if (dayIdx >= 0 && dayIdx < 7 && row.hour >= 0 && row.hour < 24) {
+      data[dayIdx][row.hour] = row.total_duration
+    }
+  })
+  return { data }
+}
+
+function getWeeklyMatrixHourApps(weekday, hour) {
+  if (!db) return []
+  const sqlWeekday = weekday === 6 ? 0 : weekday + 1
+  const stmt = db.prepare(`
+    SELECT process_name, COALESCE(SUM(duration), 0) as total_duration
+    FROM usage_logs
+    WHERE CAST(strftime('%w', date) AS INTEGER) = ? AND hour = ?
+    GROUP BY process_name
+    ORDER BY total_duration DESC
+    LIMIT 3
+  `)
+  return stmt.all(sqlWeekday, hour)
+}
+
 function insertAfkSession(session) {
   if (!db) return null
   const stmt = db.prepare(`
@@ -1363,5 +1426,8 @@ module.exports = {
   getAppCategory,
   saveAppCategory,
   getDefaultCategoriesList,
-  getCategoryUsageStats
+  getCategoryUsageStats,
+  getWeeklyDailyTotals,
+  getWeeklyHeatmapMatrix,
+  getWeeklyMatrixHourApps
 }
