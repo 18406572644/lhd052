@@ -733,6 +733,67 @@ function getDateAppUsage(dateStr) {
   return stmt.all(dateStr)
 }
 
+function getAppUsageByDate(dateStr) {
+  if (!db) return []
+  const stmt = db.prepare(`
+    SELECT process_name, SUM(duration) as total_duration
+    FROM usage_logs
+    WHERE date = ?
+    GROUP BY process_name
+    ORDER BY total_duration DESC
+  `)
+  return stmt.all(dateStr)
+}
+
+function getAppDetailByDate(processName, dateStr) {
+  if (!db) return null
+  const date = dateStr || new Date().toISOString().split('T')[0]
+  
+  const hourlyStmt = db.prepare(`
+    SELECT hour, COALESCE(SUM(duration), 0) as total_duration
+    FROM usage_logs
+    WHERE date = ? AND process_name = ?
+    GROUP BY hour
+    ORDER BY hour
+  `)
+  const hourlyResults = hourlyStmt.all(date, processName)
+  const hourlyHeatmap = new Array(24).fill(0)
+  hourlyResults.forEach(row => {
+    hourlyHeatmap[row.hour] = row.total_duration
+  })
+  
+  const timeStmt = db.prepare(`
+    SELECT MIN(start_time) as first_time, MAX(end_time) as last_time, COUNT(*) as session_count
+    FROM usage_logs
+    WHERE date = ? AND process_name = ?
+  `)
+  const timeResult = timeStmt.get(date, processName)
+  
+  if (!timeResult || !timeResult.first_time) {
+    return {
+      processName,
+      date,
+      totalDuration: 0,
+      hourlyHeatmap,
+      firstTime: null,
+      lastTime: null,
+      sessionCount: 0
+    }
+  }
+  
+  const totalDuration = hourlyHeatmap.reduce((sum, v) => sum + v, 0)
+  
+  return {
+    processName,
+    date,
+    totalDuration,
+    hourlyHeatmap,
+    firstTime: timeResult.first_time,
+    lastTime: timeResult.last_time,
+    sessionCount: timeResult.session_count
+  }
+}
+
 function getDateRangeHeatmap(range) {
   switch (range) {
     case 'today':
@@ -1278,6 +1339,8 @@ module.exports = {
   getHourlyAppUsage,
   getDateRangeHeatmap,
   getDateAppUsage,
+  getAppUsageByDate,
+  getAppDetailByDate,
   insertAfkSession,
   closeOpenAfkSession,
   getTodayAfkSessions,

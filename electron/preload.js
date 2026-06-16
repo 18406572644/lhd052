@@ -47,5 +47,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAllAppCategories: () => ipcRenderer.invoke('get-all-app-categories'),
   saveAppCategory: (processName, category) => ipcRenderer.invoke('save-app-category', processName, category),
   getDefaultCategories: () => ipcRenderer.invoke('get-default-categories'),
-  getCategoryUsageStats: (dateStr) => ipcRenderer.invoke('get-category-usage-stats', dateStr)
+  getCategoryUsageStats: (dateStr) => ipcRenderer.invoke('get-category-usage-stats', dateStr),
+  getAppUsageByDate: (date) => ipcRenderer.invoke('get-app-usage-by-date', date),
+  getAppDetailByDate: (processName, date) => ipcRenderer.invoke('get-app-detail-by-date', processName, date),
+  getSetting: (key, defaultValue) => ipcRenderer.invoke('get-setting', key, defaultValue),
+  setSetting: (key, value) => ipcRenderer.invoke('set-setting', key, value)
 })

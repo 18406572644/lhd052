@@ -11,6 +11,8 @@ const {
   getHourlyAppUsage,
   getDailyHeatmapByDate,
   getDateAppUsage,
+  getAppUsageByDate,
+  getAppDetailByDate,
   insertBodyMetric,
   getBodyMetricByDate,
   getBodyMetricsRange,
@@ -25,7 +27,9 @@ const {
   getAllAppCategories,
   saveAppCategory,
   getDefaultCategoriesList,
-  getCategoryUsageStats
+  getCategoryUsageStats,
+  getSetting,
+  setSetting
 } = require('./database')
 
 let miniWindowRef = null
@@ -224,6 +228,23 @@ function registerIpcHandlers() {
 
   ipcMain.handle('get-category-usage-stats', (_event, dateStr) => {
     return getCategoryUsageStats(dateStr)
+  })
+
+  ipcMain.handle('get-app-usage-by-date', (_event, date) => {
+    return getAppUsageByDate(date)
+  })
+
+  ipcMain.handle('get-app-detail-by-date', (_event, processName, date) => {
+    return getAppDetailByDate(processName, date)
+  })
+
+  ipcMain.handle('get-setting', (_event, key, defaultValue) => {
+    return getSetting(key, defaultValue)
+  })
+
+  ipcMain.handle('set-setting', (_event, key, value) => {
+    setSetting(key, value)
+    return true
   })
 }
 
